@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ระบบบัตรคอนเสิร์ต</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+    <script src="config.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <header class="app-header">
+      <div>
+        <p class="eyebrow">Concert Ticket Check-in</p>
+        <h1>ระบบจำหน่ายและเช็คอินบัตรคอนเสิร์ต</h1>
+      </div>
+      <div class="event-day-switch" aria-label="เลือกวันงานปัจจุบัน">
+        <button class="day-chip is-active" data-current-day="Day 1">Day 1</button>
+        <button class="day-chip" data-current-day="Day 2">Day 2</button>
+        <button class="day-chip" data-current-day="Day 3">Day 3</button>
+        <button class="day-chip" data-current-day="Day 4">Day 4</button>
+      </div>
+    </header>
+
+    <main>
+      <section id="setupWarning" class="setup-warning" hidden>
+        ตั้งค่า Supabase ในไฟล์ <strong>config.js</strong> ก่อนใช้งานออนไลน์จริง
+      </section>
+
+      <section class="dashboard-grid" aria-label="Dashboard">
+        <article class="metric">
+          <span>ผู้เข้างานวันนี้</span>
+          <strong id="todayCheckins">0</strong>
+        </article>
+        <article class="metric">
+          <span>เช็คอินทั้งหมด</span>
+          <strong id="totalCheckins">0</strong>
+        </article>
+        <article class="metric">
+          <span>QR ที่ออกแล้ว</span>
+          <strong id="totalIssued">0</strong>
+        </article>
+        <article class="metric">
+          <span>VIP คงเหลือ</span>
+          <strong id="vipRemaining">30</strong>
+        </article>
+      </section>
+
+      <section class="workbench">
+        <div class="panel scanner-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Mobile Check-in</p>
+              <h2>สแกนบัตรเข้างาน</h2>
+            </div>
+            <span id="activeDayBadge" class="status-badge">Day 1</span>
+          </div>
+
+          <div class="scanner-frame">
+            <video id="scannerVideo" playsinline muted></video>
+            <div class="scanner-placeholder" id="scannerPlaceholder">
+              <span>กล้องพร้อมสแกน QR</span>
+            </div>
+          </div>
+
+          <div class="control-row">
+            <button id="startScanner" class="primary-button">เปิดกล้อง</button>
+            <button id="stopScanner" class="ghost-button">ปิดกล้อง</button>
+          </div>
+
+          <form id="manualCheckinForm" class="manual-form">
+            <label for="manualCode">กรอกรหัส QR</label>
+            <div class="inline-input">
+              <input id="manualCode" name="manualCode" placeholder="เช่น VIP001-03 หรือ REG0007" autocomplete="off" />
+              <button class="primary-button" type="submit">เช็คอิน</button>
+            </div>
+          </form>
+
+          <label for="staffName">ชื่อเจ้าหน้าที่</label>
+          <input id="staffName" placeholder="เช่น แอน, บอย, Gate A" autocomplete="name" />
+
+          <div id="scanResult" class="scan-result neutral">รอสแกนบัตร</div>
+        </div>
+
+        <div class="panel issue-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Ticket Issue</p>
+              <h2>ออกบัตรและส่ง LINE OA</h2>
+            </div>
+          </div>
+
+          <form id="issueForm" class="issue-form">
+            <label for="ticketType">ประเภทบัตร</label>
+            <select id="ticketType" name="ticketType">
+              <option value="VIP">VIP - 2,000 บาท / 4 คน</option>
+              <option value="Regular">Regular - 150 บาท / คน</option>
+            </select>
+
+            <label for="eventDay">วันของบัตร</label>
+            <select id="eventDay" name="eventDay">
+              <option>Day 1</option>
+              <option>Day 2</option>
+              <option>Day 3</option>
+              <option>Day 4</option>
+            </select>
+
+            <label for="buyerName">ชื่อลูกค้า</label>
+            <input id="buyerName" name="buyerName" placeholder="ชื่อลูกค้าหรือโต๊ะ" />
+
+            <label for="lineUserId">LINE userId ลูกค้า</label>
+            <input id="lineUserId" name="lineUserId" list="lineCustomerList" placeholder="เช่น Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+            <datalist id="lineCustomerList"></datalist>
+
+            <label for="adminPin">รหัสแอดมินสำหรับส่ง LINE</label>
+            <input id="adminPin" name="adminPin" type="password" placeholder="ตั้งค่า ADMIN_PIN ตอน deploy" />
+
+            <label class="checkbox-row">
+              <input id="sendLine" name="sendLine" type="checkbox" checked />
+              <span>ส่ง QR ให้ลูกค้าทาง LINE OA หลังออกบัตร</span>
+            </label>
+
+            <button class="primary-button" type="submit">สร้างบัตร</button>
+          </form>
+
+          <div class="ticket-rules">
+            <div><strong>VIP</strong><span>จำกัด 30 ใบ, 1 ใบแตกเป็น 4 QR, เบียร์ 6 กระป๋อง, น้ำแข็ง 1 ชุด</span></div>
+            <div><strong>Regular</strong><span>1 คน, 1 QR, ราคา 150 บาท</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="tables">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Issued Tickets</p>
+              <h2>บัตรที่ออกแล้ว</h2>
+            </div>
+            <button id="refreshData" class="ghost-button" type="button">รีเฟรช</button>
+          </div>
+          <div id="ticketList" class="ticket-list"></div>
+        </div>
+
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Check-in Log</p>
+              <h2>ประวัติเช็คอิน</h2>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>เวลา</th>
+                  <th>QR</th>
+                  <th>วันบัตร</th>
+                  <th>เจ้าหน้าที่</th>
+                </tr>
+              </thead>
+              <tbody id="checkinLog"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

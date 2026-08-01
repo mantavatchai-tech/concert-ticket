@@ -1,0 +1,15 @@
+{
+  "name": "concert-ticket-checkin",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "vercel dev",
+    "check": "node --check app.js && node --check api/send-line-ticket.js && node --check api/qr.js && node --check api/line-webhook.js"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  },
+  "devDependencies": {
+    "vercel": "^44.7.3"
+  }
+}
