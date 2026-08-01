@@ -1,8 +1,14 @@
 const VIP_LIMIT = 30;
+const EVENT_DATES = [
+  "2026-08-27",
+  "2026-08-28",
+  "2026-08-30",
+  "2026-09-06",
+];
 const APP_CONFIG = window.APP_CONFIG || {};
 const currentDayKey = "concert-current-day";
 
-let currentDay = localStorage.getItem(currentDayKey) || "Day 1";
+let currentDay = normalizeEventDate(localStorage.getItem(currentDayKey)) || EVENT_DATES[0];
 let tickets = [];
 let checkins = [];
 let lineCustomers = [];
@@ -63,7 +69,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 function wireEvents() {
   elements.dayButtons.forEach((button) => {
     button.addEventListener("click", async () => {
-      currentDay = button.dataset.currentDay;
+      currentDay = normalizeEventDate(button.dataset.currentDay) || EVENT_DATES[0];
       localStorage.setItem(currentDayKey, currentDay);
       render();
     });
@@ -224,7 +230,7 @@ async function checkIn(rawCode) {
   }
 
   if (result.status === "wrong_day") {
-    showResult(`บัตรนี้ใช้สำหรับ ${result.event_day} ไม่อนุญาตให้เข้า`, "error");
+    showResult(`บัตรนี้ใช้สำหรับ ${formatEventDate(result.event_day)} ไม่อนุญาตให้เข้า`, "error");
     return;
   }
 
@@ -235,7 +241,7 @@ async function checkIn(rawCode) {
   }
 
   await loadData();
-  showResult(`อนุญาตให้เข้า: ${code} (${currentDay})`, "success");
+  showResult(`อนุญาตให้เข้า: ${code} (${formatEventDate(currentDay)})`, "success");
 }
 
 async function startScanner() {
@@ -304,7 +310,7 @@ function renderDayControls() {
   elements.dayButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.currentDay === currentDay);
   });
-  elements.activeDayBadge.textContent = currentDay;
+  elements.activeDayBadge.textContent = formatEventDate(currentDay);
 }
 
 function renderMetrics() {
@@ -342,7 +348,7 @@ function renderTickets() {
       <div class="qr-box" data-qr="${firstCode}" aria-label="QR ${firstCode}"></div>
       <div class="ticket-meta">
         <h3>${ticket.id} · ${ticket.ticket_type}</h3>
-        <p>วันบัตร: <strong>${ticket.event_day}</strong></p>
+        <p>วันบัตร: <strong>${formatEventDate(ticket.event_day)}</strong></p>
         <p>ลูกค้า: ${escapeHtml(ticket.buyer_name || "-")}</p>
         <p>LINE userId: ${escapeHtml(ticket.line_user_id || "-")}</p>
         <p>ราคา: ${Number(ticket.price).toLocaleString("th-TH")} บาท · จำนวน ${ticket.capacity} คน</p>
@@ -381,7 +387,7 @@ function renderCheckins() {
       <tr>
         <td>${new Date(item.checked_in_at).toLocaleString("th-TH")}</td>
         <td>${item.code}</td>
-        <td>${item.event_day}</td>
+        <td>${formatEventDate(item.event_day)}</td>
         <td>${escapeHtml(item.staff_name)}</td>
       </tr>
     `)
@@ -400,4 +406,28 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+function normalizeEventDate(value) {
+  if (EVENT_DATES.includes(value)) return value;
+
+  const legacyMap = {
+    "Day 1": "2026-08-27",
+    "Day 2": "2026-08-28",
+    "Day 3": "2026-08-30",
+    "Day 4": "2026-09-06",
+  };
+
+  return legacyMap[value] || "";
+}
+
+function formatEventDate(value) {
+  const normalized = normalizeEventDate(value) || value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized || "-";
+
+  return new Intl.DateTimeFormat("th-TH", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${normalized}T00:00:00+07:00`));
 }

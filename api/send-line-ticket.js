@@ -11,10 +11,11 @@ function asTicketUrl(baseUrl, code) {
 
 function buildMessages(baseUrl, ticket) {
   const codes = Array.isArray(ticket.codes) ? ticket.codes : [];
+  const eventDate = formatEventDate(ticket.event_day);
   const header = [
     `บัตรคอนเสิร์ต ${ticket.ticket_id}`,
     `ประเภท: ${ticket.ticket_type}`,
-    `วันงาน: ${ticket.event_day}`,
+    `วันงาน: ${eventDate}`,
     ticket.buyer_name ? `ลูกค้า: ${ticket.buyer_name}` : "",
     ticket.perks ? `สิทธิ์ VIP: ${ticket.perks}` : "",
     "",
@@ -31,6 +32,23 @@ function buildMessages(baseUrl, ticket) {
     { type: "text", text: `${header}\nรหัส QR: ${codes.join(", ")}` },
     ...imageMessages,
   ];
+}
+
+function formatEventDate(value) {
+  const legacyMap = {
+    "Day 1": "2026-08-27",
+    "Day 2": "2026-08-28",
+    "Day 3": "2026-08-30",
+    "Day 4": "2026-09-06",
+  };
+  const normalized = legacyMap[value] || value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized || "-";
+
+  return new Intl.DateTimeFormat("th-TH", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${normalized}T00:00:00+07:00`));
 }
 
 module.exports = async function handler(request, response) {

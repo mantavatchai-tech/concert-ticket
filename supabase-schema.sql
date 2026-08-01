@@ -10,7 +10,7 @@ on conflict (ticket_type) do nothing;
 create table if not exists public.tickets (
   id text primary key,
   ticket_type text not null check (ticket_type in ('VIP', 'Regular')),
-  event_day text not null check (event_day in ('Day 1', 'Day 2', 'Day 3', 'Day 4')),
+  event_day text not null check (event_day in ('2026-08-27', '2026-08-28', '2026-08-30', '2026-09-06')),
   buyer_name text not null default '-',
   line_user_id text,
   price integer not null,
@@ -91,7 +91,7 @@ begin
     raise exception 'ประเภทบัตรไม่ถูกต้อง';
   end if;
 
-  if p_event_day not in ('Day 1', 'Day 2', 'Day 3', 'Day 4') then
+  if p_event_day not in ('2026-08-27', '2026-08-28', '2026-08-30', '2026-09-06') then
     raise exception 'วันของบัตรไม่ถูกต้อง';
   end if;
 
