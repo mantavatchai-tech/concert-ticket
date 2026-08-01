@@ -1,10 +1,5 @@
 const VIP_LIMIT = 30;
-const EVENT_DATES = [
-  "2026-08-27",
-  "2026-08-28",
-  "2026-08-30",
-  "2026-09-06",
-];
+const EVENT_DATES = ["2026-08-27", "2026-08-28", "2026-08-30", "2026-09-06"];
 const APP_CONFIG = window.APP_CONFIG || {};
 const currentDayKey = "concert-current-day";
 
@@ -28,6 +23,7 @@ const elements = {
   vipRemaining: document.querySelector("#vipRemaining"),
   issueForm: document.querySelector("#issueForm"),
   ticketType: document.querySelector("#ticketType"),
+  ticketQuantity: document.querySelector("#ticketQuantity"),
   eventDay: document.querySelector("#eventDay"),
   buyerName: document.querySelector("#buyerName"),
   lineUserId: document.querySelector("#lineUserId"),
@@ -55,6 +51,8 @@ const db = supabaseReady
 document.addEventListener("DOMContentLoaded", async () => {
   wireEvents();
   renderDayControls();
+  updateQuantityState();
+
   if (!supabaseReady) {
     elements.setupWarning.hidden = false;
     showResult("ยังไม่ได้ตั้งค่า Supabase ใน config.js", "warning");
@@ -68,7 +66,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
 function wireEvents() {
   elements.dayButtons.forEach((button) => {
-    button.addEventListener("click", async () => {
+    button.addEventListener("click", () => {
       currentDay = normalizeEventDate(button.dataset.currentDay) || EVENT_DATES[0];
       localStorage.setItem(currentDayKey, currentDay);
       render();
@@ -79,6 +77,8 @@ function wireEvents() {
     event.preventDefault();
     await issueTicket();
   });
+  elements.ticketType.addEventListener("change", updateQuantityState);
+  elements.ticketList.addEventListener("click", handleTicketAction);
 
   elements.manualCheckinForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -148,27 +148,37 @@ async function issueTicket() {
   const eventDay = elements.eventDay.value;
   const buyerName = elements.buyerName.value.trim() || "-";
   const lineUserId = elements.lineUserId.value.trim();
+  const quantity = ticketType === "Regular" ? clampQuantity(elements.ticketQuantity.value) : 1;
+  const issuedTickets = [];
 
-  showResult("กำลังสร้างบัตร", "neutral");
-  const { data, error } = await db.rpc("issue_ticket", {
-    p_ticket_type: ticketType,
-    p_event_day: eventDay,
-    p_buyer_name: buyerName,
-    p_line_user_id: lineUserId || null,
-  });
+  showResult(`กำลังสร้างบัตร ${quantity} ใบ`, "neutral");
+  for (let index = 0; index < quantity; index += 1) {
+    const numberedName = quantity > 1 ? `${buyerName} #${index + 1}` : buyerName;
+    const { data, error } = await db.rpc("issue_ticket", {
+      p_ticket_type: ticketType,
+      p_event_day: eventDay,
+      p_buyer_name: numberedName,
+      p_line_user_id: lineUserId || null,
+    });
 
-  if (error) {
-    showResult(error.message, "error");
-    return;
+    if (error) {
+      showResult(error.message, "error");
+      await loadData();
+      return;
+    }
+
+    issuedTickets.push(data);
   }
 
-  const issuedTicket = data;
   await loadData();
 
   if (elements.sendLine.checked && lineUserId) {
-    await sendTicketToLine(lineUserId, issuedTicket);
+    for (const issuedTicket of issuedTickets) {
+      await sendTicketToLine(lineUserId, issuedTicket);
+    }
   } else {
-    showResult(`สร้างบัตร ${issuedTicket.ticket_id} แล้ว`, "success");
+    const ticketIds = issuedTickets.map((ticket) => ticket.ticket_id).join(", ");
+    showResult(`สร้างบัตร ${ticketIds} แล้ว`, "success");
   }
 
   elements.buyerName.value = "";
@@ -223,20 +233,19 @@ async function checkIn(rawCode) {
     return;
   }
 
-  const result = data;
-  if (result.status === "not_found") {
+  if (data.status === "not_found") {
     showResult(`ไม่พบบัตร ${code}`, "error");
     return;
   }
 
-  if (result.status === "wrong_day") {
-    showResult(`บัตรนี้ใช้สำหรับ ${formatEventDate(result.event_day)} ไม่อนุญาตให้เข้า`, "error");
+  if (data.status === "wrong_day") {
+    showResult(`บัตรนี้ใช้สำหรับ ${formatEventDate(data.event_day)} ไม่อนุญาตให้เข้า`, "error");
     return;
   }
 
-  if (result.status === "already_checked_in") {
-    const time = new Date(result.checked_in_at).toLocaleString("th-TH");
-    showResult(`${code} เช็คอินไปแล้ว เวลา ${time} โดย ${result.staff_name || "-"}`, "warning");
+  if (data.status === "already_checked_in") {
+    const time = new Date(data.checked_in_at).toLocaleString("th-TH");
+    showResult(`${code} เช็คอินไปแล้ว เวลา ${time} โดย ${data.staff_name || "-"}`, "warning");
     return;
   }
 
@@ -294,10 +303,6 @@ async function scanFrame() {
   }
 }
 
-function normalizeScannedValue(value) {
-  return String(value || "").trim().toUpperCase();
-}
-
 function render() {
   renderDayControls();
   renderMetrics();
@@ -340,12 +345,18 @@ function renderTickets() {
 
   elements.ticketList.innerHTML = "";
   tickets.forEach((ticket) => {
-    const codes = [...ticket.ticket_codes].sort((a, b) => a.seat_no - b.seat_no);
-    const firstCode = codes[0]?.code || ticket.id;
+    const codes = getSortedCodes(ticket);
     const card = document.createElement("article");
     card.className = "ticket-card";
     card.innerHTML = `
-      <div class="qr-box" data-qr="${firstCode}" aria-label="QR ${firstCode}"></div>
+      <div class="ticket-qr-grid">
+        ${codes.map((qr) => `
+          <div class="ticket-qr-item">
+            <div class="qr-box" data-qr="${qr.code}" aria-label="QR ${qr.code}"></div>
+            <strong>${qr.code}</strong>
+          </div>
+        `).join("")}
+      </div>
       <div class="ticket-meta">
         <h3>${ticket.id} · ${ticket.ticket_type}</h3>
         <p>วันบัตร: <strong>${formatEventDate(ticket.event_day)}</strong></p>
@@ -355,6 +366,12 @@ function renderTickets() {
         ${ticket.perks ? `<p>สิทธิ์: ${ticket.perks}</p>` : ""}
         <div class="code-list">
           ${codes.map((qr) => `<span class="code-pill ${qr.checked_in_at ? "used" : ""}">${qr.code}</span>`).join("")}
+        </div>
+        <div class="ticket-actions">
+          <button class="ghost-button" type="button" data-action="copy" data-ticket-id="${ticket.id}">คัดลอกรหัส QR</button>
+          <button class="ghost-button" type="button" data-action="download" data-ticket-id="${ticket.id}">ดาวน์โหลด QR</button>
+          <button class="ghost-button" type="button" data-action="print" data-ticket-id="${ticket.id}">พิมพ์บัตร</button>
+          <button class="primary-button" type="button" data-action="open" data-ticket-id="${ticket.id}">เปิดหน้าลูกค้า</button>
         </div>
       </div>
     `;
@@ -394,9 +411,139 @@ function renderCheckins() {
     .join("");
 }
 
+async function handleTicketAction(event) {
+  const button = event.target.closest("[data-action]");
+  if (!button) return;
+
+  const ticket = tickets.find((item) => item.id === button.dataset.ticketId);
+  if (!ticket) return;
+
+  if (button.dataset.action === "copy") {
+    await copyTicketCodes(ticket);
+  } else if (button.dataset.action === "download") {
+    downloadTicketQrs(ticket);
+  } else if (button.dataset.action === "print") {
+    printTicket(ticket);
+  } else if (button.dataset.action === "open") {
+    window.open(getTicketUrl(ticket.id), "_blank", "noopener");
+  }
+}
+
+async function copyTicketCodes(ticket) {
+  const codes = getSortedCodes(ticket).map((qr) => qr.code).join("\n");
+  await navigator.clipboard.writeText(codes);
+  showResult(`คัดลอกรหัส QR ของ ${ticket.id} แล้ว`, "success");
+}
+
+function downloadTicketQrs(ticket) {
+  getSortedCodes(ticket).forEach((qr, index) => {
+    window.setTimeout(() => {
+      const link = document.createElement("a");
+      const canvas = document.querySelector(`[data-qr="${qr.code}"] canvas`);
+      link.href = canvas ? canvas.toDataURL("image/png") : `/api/qr?code=${encodeURIComponent(qr.code)}`;
+      link.download = `${qr.code}.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    }, index * 250);
+  });
+}
+
+function printTicket(ticket) {
+  const codes = getSortedCodes(ticket);
+  const printWindow = window.open("", "_blank", "noopener,width=900,height=700");
+  if (!printWindow) {
+    showResult("เปิดหน้าพิมพ์ไม่ได้ กรุณาอนุญาต popup", "warning");
+    return;
+  }
+
+  printWindow.document.write(`
+    <!doctype html>
+    <html lang="th">
+      <head>
+        <meta charset="utf-8" />
+        <title>${ticket.id}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 24px; color: #111827; }
+          h1 { margin: 0 0 8px; }
+          p { margin: 4px 0; }
+          .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 18px; margin-top: 20px; }
+          .qr { border: 1px solid #d0d5dd; padding: 14px; text-align: center; page-break-inside: avoid; }
+          .qr img { width: 220px; height: 220px; }
+          .code { display: block; margin-top: 10px; font-size: 18px; font-weight: 700; }
+        </style>
+      </head>
+      <body>
+        <h1>บัตรคอนเสิร์ต ${ticket.id}</h1>
+        <p>ประเภท: ${ticket.ticket_type}</p>
+        <p>วันงาน: ${formatEventDate(ticket.event_day)}</p>
+        <p>ลูกค้า: ${escapeHtml(ticket.buyer_name || "-")}</p>
+        ${ticket.perks ? `<p>สิทธิ์ VIP: ${ticket.perks}</p>` : ""}
+        <div class="grid">
+          ${codes.map((qr) => `
+            <div class="qr">
+              <img src="/api/qr?code=${encodeURIComponent(qr.code)}" alt="${qr.code}" />
+              <span class="code">${qr.code}</span>
+            </div>
+          `).join("")}
+        </div>
+        <script>
+          window.addEventListener("load", () => window.print());
+        <\/script>
+      </body>
+    </html>
+  `);
+  printWindow.document.close();
+}
+
+function getSortedCodes(ticket) {
+  return [...ticket.ticket_codes].sort((a, b) => a.seat_no - b.seat_no);
+}
+
+function getTicketUrl(ticketId) {
+  return `${window.location.origin}/ticket.html?id=${encodeURIComponent(ticketId)}`;
+}
+
+function updateQuantityState() {
+  const isRegular = elements.ticketType.value === "Regular";
+  elements.ticketQuantity.disabled = !isRegular;
+  elements.ticketQuantity.value = isRegular ? elements.ticketQuantity.value || "1" : "1";
+}
+
+function clampQuantity(value) {
+  const quantity = Number.parseInt(value, 10);
+  if (Number.isNaN(quantity)) return 1;
+  return Math.min(Math.max(quantity, 1), 50);
+}
+
+function normalizeScannedValue(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
 function showResult(message, type) {
   elements.scanResult.textContent = message;
   elements.scanResult.className = `scan-result ${type}`;
+}
+
+function normalizeEventDate(value) {
+  if (EVENT_DATES.includes(value)) return value;
+  const legacyMap = {
+    "Day 1": "2026-08-27",
+    "Day 2": "2026-08-28",
+    "Day 3": "2026-08-30",
+    "Day 4": "2026-09-06",
+  };
+  return legacyMap[value] || "";
+}
+
+function formatEventDate(value) {
+  const normalized = normalizeEventDate(value) || value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized || "-";
+  return new Intl.DateTimeFormat("th-TH", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(`${normalized}T00:00:00+07:00`));
 }
 
 function escapeHtml(value) {
@@ -406,28 +553,4 @@ function escapeHtml(value) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
-}
-
-function normalizeEventDate(value) {
-  if (EVENT_DATES.includes(value)) return value;
-
-  const legacyMap = {
-    "Day 1": "2026-08-27",
-    "Day 2": "2026-08-28",
-    "Day 3": "2026-08-30",
-    "Day 4": "2026-09-06",
-  };
-
-  return legacyMap[value] || "";
-}
-
-function formatEventDate(value) {
-  const normalized = normalizeEventDate(value) || value;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized || "-";
-
-  return new Intl.DateTimeFormat("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  }).format(new Date(`${normalized}T00:00:00+07:00`));
 }

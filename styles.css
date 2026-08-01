@@ -323,12 +323,27 @@ select {
 
 .ticket-card {
   display: grid;
-  grid-template-columns: 132px minmax(0, 1fr);
+  grid-template-columns: minmax(160px, 0.72fr) minmax(0, 1fr);
   gap: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 12px;
   background: #fbfcfe;
+}
+
+.ticket-qr-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  align-content: start;
+}
+
+.ticket-qr-item {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  color: var(--ink);
+  font-size: 13px;
 }
 
 .qr-box {
@@ -383,6 +398,86 @@ select {
   border-color: #a6dfc4;
 }
 
+.ticket-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ticket-actions button {
+  min-height: 38px;
+}
+
+.ticket-page {
+  background: #eef4f8;
+}
+
+.customer-ticket-wrap {
+  width: min(900px, 100%);
+  padding-top: 28px;
+}
+
+.customer-ticket {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: clamp(18px, 4vw, 34px);
+}
+
+.customer-ticket h1 {
+  margin: 6px 0 12px;
+  font-size: clamp(28px, 5vw, 44px);
+}
+
+.customer-ticket-details {
+  color: var(--muted);
+}
+
+.customer-ticket-details p {
+  margin: 6px 0;
+}
+
+.customer-qr-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-top: 22px;
+}
+
+.customer-qr-card {
+  display: grid;
+  gap: 8px;
+  justify-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 18px;
+  background: #fbfcfe;
+}
+
+.qr-box-large {
+  width: 220px;
+  min-height: 220px;
+}
+
+.qr-box-large canvas,
+.qr-box-large img {
+  max-width: 180px;
+  max-height: 180px;
+}
+
+.ticket-note {
+  margin: 20px 0 0;
+  color: var(--muted);
+  text-align: center;
+}
+
+.customer-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 14px;
+}
+
 .table-wrap {
   overflow-x: auto;
 }
@@ -428,6 +523,26 @@ td {
 
   .ticket-card {
     grid-template-columns: 1fr;
+  }
+}
+
+@media print {
+  body {
+    background: #fff;
+  }
+
+  .customer-actions {
+    display: none;
+  }
+
+  .customer-ticket-wrap {
+    width: 100%;
+    padding: 0;
+  }
+
+  .customer-ticket {
+    border: 0;
+    box-shadow: none;
   }
 }
 

@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="th">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>บัตรคอนเสิร์ต</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+    <script src="config.js" defer></script>
+    <script src="ticket.js" defer></script>
+  </head>
+  <body class="ticket-page">
+    <main class="customer-ticket-wrap">
+      <section id="customerTicket" class="customer-ticket">
+        <p class="eyebrow">Concert Ticket</p>
+        <h1 id="ticketTitle">บัตรคอนเสิร์ต</h1>
+        <div id="ticketDetails" class="customer-ticket-details"></div>
+        <div id="customerQrList" class="customer-qr-list"></div>
+        <p class="ticket-note">แสดง QR นี้ที่จุดเข้างาน QR แต่ละใบใช้เช็คอินได้ 1 ครั้ง</p>
+      </section>
+      <div class="customer-actions">
+        <button id="printCustomerTicket" class="primary-button">พิมพ์บัตร</button>
+      </div>
+    </main>
+  </body>
+</html>

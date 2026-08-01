@@ -99,6 +99,9 @@
               <option value="Regular">Regular - 150 บาท / คน</option>
             </select>
 
+            <label for="ticketQuantity">จำนวนบัตร Regular</label>
+            <input id="ticketQuantity" name="ticketQuantity" type="number" min="1" max="50" value="1" />
+
             <label for="eventDay">วันของบัตร</label>
             <select id="eventDay" name="eventDay">
               <option value="2026-08-27">27 Aug 2026</option>
@@ -127,7 +130,7 @@
 
           <div class="ticket-rules">
             <div><strong>VIP</strong><span>จำกัด 30 ใบ, 1 ใบแตกเป็น 4 QR, เบียร์ 6 กระป๋อง, น้ำแข็ง 1 ชุด</span></div>
-            <div><strong>Regular</strong><span>1 คน, 1 QR, ราคา 150 บาท</span></div>
+            <div><strong>Regular</strong><span>เลือกจำนวนได้, 1 คน, 1 QR, ราคา 150 บาท</span></div>
           </div>
         </div>
       </section>
