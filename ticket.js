@@ -14,7 +14,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   const { data, error } = await db
     .from("tickets")
-    .select("id,ticket_type,event_day,buyer_name,price,capacity,perks,ticket_codes(code,seat_no,checked_in_at)")
+    .select("id,ticket_type,event_day,buyer_name,price,capacity,perks,canceled_at,cancel_reason,ticket_codes(code,seat_no,checked_in_at)")
     .eq("id", ticketId)
     .single();
 
@@ -38,6 +38,16 @@ function renderTicket(ticket) {
 
   const list = document.querySelector("#customerQrList");
   list.innerHTML = "";
+  if (ticket.canceled_at) {
+    list.innerHTML = `
+      <article class="customer-qr-card">
+        <strong>บัตรนี้ถูกยกเลิกแล้ว</strong>
+        <span>${escapeHtml(ticket.cancel_reason || "-")}</span>
+      </article>
+    `;
+    return;
+  }
+
   codes.forEach((qr) => {
     const item = document.createElement("article");
     item.className = "customer-qr-card";

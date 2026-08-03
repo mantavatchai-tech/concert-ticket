@@ -41,6 +41,26 @@ https://your-site.vercel.app/api/line-webhook
 
 เมื่อคนแอดหรือทัก LINE OA ระบบจะบันทึก `line_user_id` ไว้ในตาราง `line_customers` และช่อง LINE userId ในหน้าออกบัตรจะมีรายการให้เลือก
 
+## 2.1 ระบบ Login หน้าแอดมิน
+
+หลังอัปเดตเวอร์ชันที่มีระบบ Login ให้รัน `admin-features.sql` ใน Supabase SQL Editor ระบบจะสร้างผู้ใช้เริ่มต้นในตาราง `admin_users` ให้ 3 บัญชี
+
+Role ที่ใช้ได้:
+
+- `admin` ใช้งานได้ทุกอย่าง
+- `issuer` ออกบัตร, แก้ราคา, ยกเลิกบัตร, Export รายงาน
+- `checkin` เช็คอินได้อย่างเดียว
+
+ผู้ใช้เริ่มต้น:
+
+| Username | Password | สิทธิ์ |
+| --- | --- | --- |
+| `admin` | `Admin@1234` | ทำได้ทุกอย่าง |
+| `issuer` | `Issuer@1234` | ออกบัตร/แก้ราคา/ยกเลิก/Export |
+| `checkin` | `Checkin@1234` | เช็คอินอย่างเดียว |
+
+ควรเปลี่ยน password ก่อนใช้งานจริง
+
 ## 3. Deploy ไป Vercel
 
 1. อัปโหลด repo นี้ขึ้น GitHub

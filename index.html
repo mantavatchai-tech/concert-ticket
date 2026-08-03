@@ -11,7 +11,20 @@
     <script src="app.js" defer></script>
   </head>
   <body>
-    <header class="app-header">
+    <section id="loginView" class="login-view">
+      <form id="loginForm" class="login-panel">
+        <p class="eyebrow">Admin Login</p>
+        <h1>เข้าสู่ระบบจัดการบัตร</h1>
+        <label for="loginUsername">Username</label>
+        <input id="loginUsername" name="loginUsername" autocomplete="username" required />
+        <label for="loginPassword">Password</label>
+        <input id="loginPassword" name="loginPassword" type="password" autocomplete="current-password" required />
+        <button class="primary-button" type="submit">เข้าสู่ระบบ</button>
+        <div id="loginResult" class="scan-result neutral">กรุณาเข้าสู่ระบบก่อนใช้งาน</div>
+      </form>
+    </section>
+
+    <header id="appHeader" class="app-header" hidden>
       <div>
         <p class="eyebrow">Concert Ticket Check-in</p>
         <h1>ระบบจำหน่ายและเช็คอินบัตรคอนเสิร์ต</h1>
@@ -22,9 +35,13 @@
         <button class="day-chip" data-current-day="2026-08-30">30 Aug 2026</button>
         <button class="day-chip" data-current-day="2026-09-06">6 Sep 2026</button>
       </div>
+      <div class="user-bar">
+        <span id="currentUserBadge" class="status-badge">-</span>
+        <button id="logoutButton" class="ghost-button" type="button">ออกจากระบบ</button>
+      </div>
     </header>
 
-    <main>
+    <main id="appMain" hidden>
       <section id="setupWarning" class="setup-warning" hidden>
         ตั้งค่า Supabase ในไฟล์ <strong>config.js</strong> ก่อนใช้งานออนไลน์จริง
       </section>
@@ -148,7 +165,10 @@
               <p class="eyebrow">Issued Tickets</p>
               <h2>บัตรที่ออกแล้ว</h2>
             </div>
-            <button id="refreshData" class="ghost-button" type="button">รีเฟรช</button>
+            <div class="panel-actions">
+              <button id="exportSales" class="ghost-button" type="button">Export ยอดขาย</button>
+              <button id="refreshData" class="ghost-button" type="button">รีเฟรช</button>
+            </div>
           </div>
           <div id="ticketList" class="ticket-list"></div>
         </div>
@@ -171,6 +191,31 @@
                 </tr>
               </thead>
               <tbody id="checkinLog"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="tables">
+        <div class="panel">
+          <div class="panel-heading">
+            <div>
+              <p class="eyebrow">Audit Log</p>
+              <h2>ประวัติการแก้ไขบัตร</h2>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>เวลา</th>
+                  <th>ผู้ใช้</th>
+                  <th>บัตร</th>
+                  <th>รายการ</th>
+                  <th>รายละเอียด</th>
+                </tr>
+              </thead>
+              <tbody id="auditLog"></tbody>
             </table>
           </div>
         </div>

@@ -2,18 +2,31 @@ const VIP_LIMIT = 30;
 const EVENT_DATES = ["2026-08-27", "2026-08-28", "2026-08-30", "2026-09-06"];
 const APP_CONFIG = window.APP_CONFIG || {};
 const currentDayKey = "concert-current-day";
+const sessionKey = "concert-admin-session";
 
 let currentDay = normalizeEventDate(localStorage.getItem(currentDayKey)) || EVENT_DATES[0];
 let tickets = [];
 let checkins = [];
 let lineCustomers = [];
+let auditLogs = [];
+let currentSession = null;
 let scannerStream = null;
 let scannerTimer = null;
+let realtimeChannel = null;
 let detector = null;
 let lastScanValue = "";
 let lastScanAt = 0;
 
 const elements = {
+  loginView: document.querySelector("#loginView"),
+  loginForm: document.querySelector("#loginForm"),
+  loginUsername: document.querySelector("#loginUsername"),
+  loginPassword: document.querySelector("#loginPassword"),
+  loginResult: document.querySelector("#loginResult"),
+  appHeader: document.querySelector("#appHeader"),
+  appMain: document.querySelector("#appMain"),
+  currentUserBadge: document.querySelector("#currentUserBadge"),
+  logoutButton: document.querySelector("#logoutButton"),
   setupWarning: document.querySelector("#setupWarning"),
   dayButtons: document.querySelectorAll("[data-current-day]"),
   activeDayBadge: document.querySelector("#activeDayBadge"),
@@ -33,6 +46,7 @@ const elements = {
   sendLine: document.querySelector("#sendLine"),
   ticketList: document.querySelector("#ticketList"),
   checkinLog: document.querySelector("#checkinLog"),
+  auditLog: document.querySelector("#auditLog"),
   manualCheckinForm: document.querySelector("#manualCheckinForm"),
   manualCode: document.querySelector("#manualCode"),
   staffName: document.querySelector("#staffName"),
@@ -42,6 +56,7 @@ const elements = {
   scannerVideo: document.querySelector("#scannerVideo"),
   scannerPlaceholder: document.querySelector("#scannerPlaceholder"),
   refreshData: document.querySelector("#refreshData"),
+  exportSales: document.querySelector("#exportSales"),
 };
 
 const supabaseReady = Boolean(APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey);
@@ -55,17 +70,31 @@ document.addEventListener("DOMContentLoaded", async () => {
   updateQuantityState();
 
   if (!supabaseReady) {
+    showLoginResult("ยังไม่ได้ตั้งค่า Supabase ใน config.js", "warning");
     elements.setupWarning.hidden = false;
     showResult("ยังไม่ได้ตั้งค่า Supabase ใน config.js", "warning");
     render();
     return;
   }
 
-  await loadData();
-  subscribeToChanges();
+  restoreSession();
+  if (currentSession) {
+    showApp();
+    await loadData();
+    subscribeToChanges();
+  } else {
+    showLogin();
+  }
 });
 
 function wireEvents() {
+  elements.loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await login();
+  });
+
+  elements.logoutButton.addEventListener("click", logout);
+
   elements.dayButtons.forEach((button) => {
     button.addEventListener("click", () => {
       currentDay = normalizeEventDate(button.dataset.currentDay) || EVENT_DATES[0];
@@ -90,37 +119,133 @@ function wireEvents() {
   elements.startScanner.addEventListener("click", startScanner);
   elements.stopScanner.addEventListener("click", stopScanner);
   elements.refreshData.addEventListener("click", loadData);
+  elements.exportSales.addEventListener("click", exportSalesReport);
+}
+
+function restoreSession() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(sessionKey) || "null");
+    if (saved?.token && saved?.role) currentSession = saved;
+  } catch {
+    currentSession = null;
+  }
+}
+
+async function login() {
+  if (!db) return;
+
+  const username = elements.loginUsername.value.trim();
+  const password = elements.loginPassword.value;
+  if (!username || !password) {
+    showLoginResult("กรุณากรอก Username และ Password", "warning");
+    return;
+  }
+
+  showLoginResult("กำลังเข้าสู่ระบบ", "neutral");
+  const { data, error } = await db.rpc("admin_login", {
+    p_username: username,
+    p_password: password,
+  });
+
+  if (error) {
+    showLoginResult(error.message, "error");
+    return;
+  }
+
+  currentSession = data;
+  localStorage.setItem(sessionKey, JSON.stringify(currentSession));
+  elements.loginPassword.value = "";
+  showApp();
+  await loadData();
+  subscribeToChanges();
+}
+
+async function logout() {
+  if (db && currentSession?.token) {
+    await db.rpc("admin_logout", { p_session_token: currentSession.token }).catch(() => {});
+  }
+  currentSession = null;
+  localStorage.removeItem(sessionKey);
+  stopScanner();
+  unsubscribeFromChanges();
+  showLogin();
+}
+
+function showLogin() {
+  elements.loginView.hidden = false;
+  elements.appHeader.hidden = true;
+  elements.appMain.hidden = true;
+  showLoginResult("กรุณาเข้าสู่ระบบก่อนใช้งาน", "neutral");
+}
+
+function showApp() {
+  elements.loginView.hidden = true;
+  elements.appHeader.hidden = false;
+  elements.appMain.hidden = false;
+  elements.currentUserBadge.textContent = `${currentSession.display_name || currentSession.username} · ${formatRole(currentSession.role)}`;
+  applyRoleUi();
+}
+
+function applyRoleUi() {
+  const canIssueTickets = hasRolePermission("issue");
+  const canCheckInTickets = hasRolePermission("checkin");
+  const canExportSales = hasRolePermission("export");
+
+  document.querySelector(".issue-panel").hidden = !canIssueTickets;
+  document.querySelector(".scanner-panel").hidden = !canCheckInTickets;
+  elements.exportSales.hidden = !canExportSales;
+}
+
+function hasRolePermission(permission) {
+  if (!currentSession) return false;
+  if (currentSession.role === "admin") return true;
+  if (permission === "issue") return currentSession.role === "issuer";
+  if (permission === "manage_ticket") return currentSession.role === "issuer";
+  if (permission === "export") return currentSession.role === "issuer";
+  if (permission === "checkin") return currentSession.role === "checkin";
+  return false;
 }
 
 async function loadData() {
-  if (!db) return;
+  if (!db || !currentSession) return;
   showResult("กำลังโหลดข้อมูลจากฐานข้อมูลกลาง", "neutral");
 
-  const [ticketResult, checkinResult] = await Promise.all([
+  const [ticketResult, checkinResult, auditResult] = await Promise.all([
     db
       .from("tickets")
-      .select("id,ticket_type,event_day,buyer_name,line_user_id,price,capacity,perks,issued_at,ticket_codes(code,seat_no,checked_in_at,staff_name)")
+      .select("id,ticket_type,event_day,buyer_name,line_user_id,price,capacity,perks,issued_at,canceled_at,canceled_by,cancel_reason,ticket_codes(code,seat_no,checked_in_at,staff_name)")
       .order("issued_at", { ascending: false }),
     db
       .from("checkins")
       .select("code,ticket_id,ticket_type,event_day,staff_name,checked_in_at")
       .order("checked_in_at", { ascending: false })
       .limit(200),
+    db
+      .from("ticket_audit_logs")
+      .select("ticket_id,action,actor_username,actor_role,details,created_at")
+      .order("created_at", { ascending: false })
+      .limit(100),
     loadLineCustomers(),
   ]);
 
-  if (ticketResult.error || checkinResult.error) {
-    showResult(ticketResult.error?.message || checkinResult.error?.message || "โหลดข้อมูลไม่สำเร็จ", "error");
+  if (ticketResult.error || checkinResult.error || auditResult.error) {
+    showResult(ticketResult.error?.message || checkinResult.error?.message || auditResult.error?.message || "โหลดข้อมูลไม่สำเร็จ", "error");
     return;
   }
 
   tickets = ticketResult.data || [];
   checkins = checkinResult.data || [];
+  auditLogs = auditResult.data || [];
   render();
   showResult("พร้อมใช้งาน", "neutral");
 }
 
 async function loadLineCustomers() {
+  if (!hasRolePermission("issue")) {
+    lineCustomers = [];
+    return;
+  }
+
   const { data, error } = await db
     .from("line_customers")
     .select("line_user_id,display_name,last_seen_at")
@@ -131,17 +256,31 @@ async function loadLineCustomers() {
 }
 
 function subscribeToChanges() {
-  db.channel("concert-ticket-live")
+  if (realtimeChannel) return;
+
+  realtimeChannel = db.channel("concert-ticket-live")
     .on("postgres_changes", { event: "*", schema: "public", table: "tickets" }, loadData)
     .on("postgres_changes", { event: "*", schema: "public", table: "ticket_codes" }, loadData)
     .on("postgres_changes", { event: "*", schema: "public", table: "checkins" }, loadData)
+    .on("postgres_changes", { event: "*", schema: "public", table: "ticket_audit_logs" }, loadData)
     .on("postgres_changes", { event: "*", schema: "public", table: "line_customers" }, loadData)
     .subscribe();
+}
+
+function unsubscribeFromChanges() {
+  if (!realtimeChannel || !db) return;
+  db.removeChannel(realtimeChannel);
+  realtimeChannel = null;
 }
 
 async function issueTicket() {
   if (!db) {
     showResult("ยังไม่ได้เชื่อมต่อ Supabase", "error");
+    return;
+  }
+
+  if (!hasRolePermission("issue")) {
+    showResult("บัญชีนี้ไม่มีสิทธิ์ออกบัตร", "error");
     return;
   }
 
@@ -169,6 +308,7 @@ async function issueTicket() {
       p_buyer_name: numberedName,
       p_line_user_id: lineUserId || null,
       p_ticket_price: ticketPrice,
+      p_session_token: currentSession.token,
     });
 
     if (error) {
@@ -225,6 +365,11 @@ async function sendTicketToLine(lineUserId, ticket) {
 }
 
 async function checkIn(rawCode) {
+  if (!hasRolePermission("checkin")) {
+    showResult("บัญชีนี้ไม่มีสิทธิ์เช็คอิน", "error");
+    return;
+  }
+
   const code = normalizeScannedValue(rawCode);
   if (!code) {
     showResult("กรุณากรอกรหัส QR", "warning");
@@ -242,6 +387,7 @@ async function checkIn(rawCode) {
     p_code: code,
     p_current_day: currentDay,
     p_staff_name: staffName,
+    p_session_token: currentSession.token,
   });
 
   if (error) {
@@ -256,6 +402,11 @@ async function checkIn(rawCode) {
 
   if (data.status === "wrong_day") {
     showResult(`บัตรนี้ใช้สำหรับ ${formatEventDate(data.event_day)} ไม่อนุญาตให้เข้า`, "error");
+    return;
+  }
+
+  if (data.status === "canceled") {
+    showResult(`บัตรนี้ถูกยกเลิกแล้ว: ${data.cancel_reason || "-"}`, "error");
     return;
   }
 
@@ -325,6 +476,7 @@ function render() {
   renderLineCustomers();
   renderTickets();
   renderCheckins();
+  renderAuditLog();
 }
 
 function renderDayControls() {
@@ -362,8 +514,9 @@ function renderTickets() {
   elements.ticketList.innerHTML = "";
   tickets.forEach((ticket) => {
     const codes = getSortedCodes(ticket);
+    const isCanceled = Boolean(ticket.canceled_at);
     const card = document.createElement("article");
-    card.className = "ticket-card";
+    card.className = `ticket-card ${isCanceled ? "canceled" : ""}`;
     card.innerHTML = `
       <div class="ticket-qr-grid">
         ${codes.map((qr) => `
@@ -379,15 +532,18 @@ function renderTickets() {
         <p>ลูกค้า: ${escapeHtml(ticket.buyer_name || "-")}</p>
         <p>LINE userId: ${escapeHtml(ticket.line_user_id || "-")}</p>
         <p>ราคา: ${Number(ticket.price).toLocaleString("th-TH")} บาท · จำนวน ${ticket.capacity} คน</p>
+        ${isCanceled ? `<p><strong>ยกเลิกแล้ว</strong>: ${escapeHtml(ticket.cancel_reason || "-")} (${escapeHtml(ticket.canceled_by || "-")})</p>` : ""}
         ${ticket.perks ? `<p>สิทธิ์: ${ticket.perks}</p>` : ""}
         <div class="code-list">
-          ${codes.map((qr) => `<span class="code-pill ${qr.checked_in_at ? "used" : ""}">${qr.code}</span>`).join("")}
+          ${codes.map((qr) => `<span class="code-pill ${isCanceled ? "canceled" : qr.checked_in_at ? "used" : ""}">${qr.code}</span>`).join("")}
         </div>
         <div class="ticket-actions">
           <button class="ghost-button" type="button" data-action="copy" data-ticket-id="${ticket.id}">คัดลอกรหัส QR</button>
           <button class="ghost-button" type="button" data-action="download" data-ticket-id="${ticket.id}">ดาวน์โหลด QR</button>
           <button class="ghost-button" type="button" data-action="print" data-ticket-id="${ticket.id}">พิมพ์บัตร</button>
           <button class="primary-button" type="button" data-action="open" data-ticket-id="${ticket.id}">เปิดหน้าลูกค้า</button>
+          ${hasRolePermission("manage_ticket") && ticket.ticket_type === "Regular" && !isCanceled ? `<button class="ghost-button" type="button" data-action="edit-price" data-ticket-id="${ticket.id}">แก้ราคา</button>` : ""}
+          ${hasRolePermission("manage_ticket") && !isCanceled ? `<button class="danger-button" type="button" data-action="cancel" data-ticket-id="${ticket.id}">ยกเลิกบัตร</button>` : ""}
         </div>
       </div>
     `;
@@ -427,6 +583,56 @@ function renderCheckins() {
     .join("");
 }
 
+function renderAuditLog() {
+  if (!auditLogs.length) {
+    elements.auditLog.innerHTML = `<tr><td colspan="5">ยังไม่มีประวัติการแก้ไข</td></tr>`;
+    return;
+  }
+
+  elements.auditLog.innerHTML = auditLogs
+    .map((item) => `
+      <tr>
+        <td>${new Date(item.created_at).toLocaleString("th-TH")}</td>
+        <td>${escapeHtml(item.actor_username)} (${formatRole(item.actor_role)})</td>
+        <td>${escapeHtml(item.ticket_id || "-")}</td>
+        <td>${formatAuditAction(item.action)}</td>
+        <td>${escapeHtml(formatAuditDetails(item))}</td>
+      </tr>
+    `)
+    .join("");
+}
+
+function exportSalesReport() {
+  if (!hasRolePermission("export")) {
+    showResult("บัญชีนี้ไม่มีสิทธิ์ Export รายงาน", "error");
+    return;
+  }
+
+  const rows = [
+    ["ticket_id", "ticket_type", "event_day", "buyer_name", "price", "capacity", "status", "issued_at", "canceled_at", "cancel_reason"],
+    ...tickets.map((ticket) => [
+      ticket.id,
+      ticket.ticket_type,
+      ticket.event_day,
+      ticket.buyer_name || "",
+      ticket.price,
+      ticket.capacity,
+      ticket.canceled_at ? "canceled" : "active",
+      ticket.issued_at,
+      ticket.canceled_at || "",
+      ticket.cancel_reason || "",
+    ]),
+    [],
+    ["summary"],
+    ["active_revenue", tickets.filter((ticket) => !ticket.canceled_at).reduce((sum, ticket) => sum + Number(ticket.price || 0), 0)],
+    ["active_tickets", tickets.filter((ticket) => !ticket.canceled_at).length],
+    ["canceled_tickets", tickets.filter((ticket) => ticket.canceled_at).length],
+  ];
+
+  downloadCsv(`sales-report-${new Date().toISOString().slice(0, 10)}.csv`, rows);
+  showResult("ดาวน์โหลดรายงานยอดขายแล้ว", "success");
+}
+
 async function handleTicketAction(event) {
   const button = event.target.closest("[data-action]");
   if (!button) return;
@@ -442,7 +648,68 @@ async function handleTicketAction(event) {
     printTicket(ticket);
   } else if (button.dataset.action === "open") {
     window.open(getTicketUrl(ticket.id), "_blank", "noopener");
+  } else if (button.dataset.action === "edit-price") {
+    await editTicketPrice(ticket);
+  } else if (button.dataset.action === "cancel") {
+    await cancelTicket(ticket);
   }
+}
+
+async function editTicketPrice(ticket) {
+  if (!hasRolePermission("manage_ticket")) {
+    showResult("บัญชีนี้ไม่มีสิทธิ์แก้ไขบัตร", "error");
+    return;
+  }
+
+  const value = window.prompt(`แก้ราคา ${ticket.id} เป็น 150 หรือ 180`, String(ticket.price));
+  if (value === null) return;
+
+  const newPrice = Number.parseInt(value, 10);
+  if (![150, 180].includes(newPrice)) {
+    showResult("ราคา Regular ต้องเป็น 150 หรือ 180", "warning");
+    return;
+  }
+
+  const { error } = await db.rpc("update_ticket_price", {
+    p_ticket_id: ticket.id,
+    p_ticket_price: newPrice,
+    p_session_token: currentSession.token,
+  });
+
+  if (error) {
+    showResult(error.message, "error");
+    return;
+  }
+
+  await loadData();
+  showResult(`แก้ราคา ${ticket.id} เป็น ${newPrice.toLocaleString("th-TH")} บาทแล้ว`, "success");
+}
+
+async function cancelTicket(ticket) {
+  if (!hasRolePermission("manage_ticket")) {
+    showResult("บัญชีนี้ไม่มีสิทธิ์ยกเลิกบัตร", "error");
+    return;
+  }
+
+  const reason = window.prompt(`เหตุผลที่ยกเลิก ${ticket.id}`, "ออกบัตรผิด");
+  if (reason === null) return;
+
+  const confirmed = window.confirm(`ยืนยันยกเลิกบัตร ${ticket.id}? QR ของบัตรนี้จะเช็คอินไม่ได้`);
+  if (!confirmed) return;
+
+  const { error } = await db.rpc("cancel_ticket", {
+    p_ticket_id: ticket.id,
+    p_reason: reason,
+    p_session_token: currentSession.token,
+  });
+
+  if (error) {
+    showResult(error.message, "error");
+    return;
+  }
+
+  await loadData();
+  showResult(`ยกเลิกบัตร ${ticket.id} แล้ว`, "success");
 }
 
 async function copyTicketCodes(ticket) {
@@ -539,6 +806,51 @@ function clampRegularPrice(value) {
   return [150, 180].includes(price) ? price : 150;
 }
 
+function formatRole(role) {
+  const labels = {
+    admin: "แอดมิน",
+    issuer: "ออกบัตร",
+    checkin: "เช็คอิน",
+  };
+  return labels[role] || role || "-";
+}
+
+function formatAuditAction(action) {
+  const labels = {
+    issue: "ออกบัตร",
+    update_price: "แก้ราคา",
+    cancel: "ยกเลิกบัตร",
+    checkin: "เช็คอิน",
+  };
+  return labels[action] || action || "-";
+}
+
+function formatAuditDetails(item) {
+  const details = item.details || {};
+  if (item.action === "update_price") return `${details.old_price} -> ${details.new_price} บาท`;
+  if (item.action === "cancel") return details.reason || "-";
+  if (item.action === "issue") return `${details.ticket_type || "-"} ${details.price || "-"} บาท ${details.event_day || ""}`.trim();
+  if (item.action === "checkin") return `${details.code || "-"} โดย ${details.staff_name || "-"}`;
+  return JSON.stringify(details);
+}
+
+function downloadCsv(filename, rows) {
+  const csv = rows.map((row) => row.map(csvCell).join(",")).join("\r\n");
+  const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  URL.revokeObjectURL(link.href);
+  link.remove();
+}
+
+function csvCell(value) {
+  const text = String(value ?? "");
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
 function normalizeScannedValue(value) {
   return String(value || "").trim().toUpperCase();
 }
@@ -546,6 +858,11 @@ function normalizeScannedValue(value) {
 function showResult(message, type) {
   elements.scanResult.textContent = message;
   elements.scanResult.className = `scan-result ${type}`;
+}
+
+function showLoginResult(message, type) {
+  elements.loginResult.textContent = message;
+  elements.loginResult.className = `scan-result ${type}`;
 }
 
 function normalizeEventDate(value) {

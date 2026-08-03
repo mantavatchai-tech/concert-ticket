@@ -112,3 +112,6 @@ end;
 $$;
 
 grant execute on function public.issue_ticket(text, text, text, text, integer) to anon;
+
+-- ถ้าใช้ระบบ Login/Role แล้ว ให้รัน admin-features.sql หลังไฟล์นี้เสมอ
+-- เพื่อสร้าง issue_ticket/check_in_ticket เวอร์ชันที่บังคับ session token
