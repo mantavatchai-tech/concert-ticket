@@ -16,6 +16,9 @@ create table if not exists public.tickets (
   price integer not null,
   capacity integer not null,
   perks text not null default '',
+  line_send_status text not null default 'not_sent' check (line_send_status in ('not_sent', 'sent', 'failed')),
+  line_sent_at timestamptz,
+  line_send_error text not null default '',
   issued_at timestamptz not null default now()
 );
 
