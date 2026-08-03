@@ -39,6 +39,7 @@ const elements = {
   ticketPrice: document.querySelector("#ticketPrice"),
   ticketQuantity: document.querySelector("#ticketQuantity"),
   eventDay: document.querySelector("#eventDay"),
+  issueResult: document.querySelector("#issueResult"),
   buyerName: document.querySelector("#buyerName"),
   lineUserId: document.querySelector("#lineUserId"),
   lineCustomerList: document.querySelector("#lineCustomerList"),
@@ -292,12 +293,12 @@ function unsubscribeFromChanges() {
 
 async function issueTicket() {
   if (!db) {
-    showResult("ยังไม่ได้เชื่อมต่อ Supabase", "error");
+    showIssueResult("ยังไม่ได้เชื่อมต่อ Supabase", "error");
     return;
   }
 
   if (!hasRolePermission("issue")) {
-    showResult("บัญชีนี้ไม่มีสิทธิ์ออกบัตร", "error");
+    showIssueResult("บัญชีนี้ไม่มีสิทธิ์ออกบัตร", "error");
     return;
   }
 
@@ -311,12 +312,12 @@ async function issueTicket() {
   const issuedTickets = [];
 
   if (elements.sendLine.checked && !adminPin) {
-    showResult("กรุณากรอกรหัสแอดมินก่อนออกบัตรและส่ง LINE OA", "warning");
+    showIssueResult("กรุณากรอกรหัสแอดมินก่อนออกบัตรและส่ง LINE OA", "warning");
     elements.adminPin.focus();
     return;
   }
 
-  showResult(`กำลังสร้างบัตร ${quantity} ใบ`, "neutral");
+  showIssueResult(`กำลังสร้างบัตร ${quantity} ใบ`, "neutral");
   for (let index = 0; index < quantity; index += 1) {
     const numberedName = quantity > 1 ? `${buyerName} #${index + 1}` : buyerName;
     const { data, error } = await db.rpc("issue_ticket", {
@@ -329,7 +330,7 @@ async function issueTicket() {
     });
 
     if (error) {
-      showResult(error.message, "error");
+      showIssueResult(error.message, "error");
       await loadData();
       return;
     }
@@ -345,7 +346,7 @@ async function issueTicket() {
     }
   } else {
     const ticketIds = issuedTickets.map((ticket) => ticket.ticket_id).join(", ");
-    showResult(`สร้างบัตร ${ticketIds} แล้ว`, "success");
+    showIssueResult(`สร้างบัตร ${ticketIds} แล้ว`, "success");
   }
 
   elements.buyerName.value = "";
@@ -355,11 +356,11 @@ async function issueTicket() {
 async function sendTicketToLine(lineUserId, ticket) {
   const adminPin = elements.adminPin.value.trim();
   if (!adminPin) {
-    showResult("ไม่ได้ส่ง LINE เพราะไม่ได้กรอกรหัสแอดมิน", "warning");
+    showIssueResult("ไม่ได้ส่ง LINE เพราะไม่ได้กรอกรหัสแอดมิน", "warning");
     return;
   }
 
-  showResult("กำลังส่ง QR ทาง LINE OA", "neutral");
+  showIssueResult("กำลังส่ง QR ทาง LINE OA", "neutral");
   const response = await fetch("/api/send-line-ticket", {
     method: "POST",
     headers: {
@@ -374,11 +375,11 @@ async function sendTicketToLine(lineUserId, ticket) {
 
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    showResult(result.error || "ส่ง LINE ไม่สำเร็จ", "error");
+    showIssueResult(result.error || "ส่ง LINE ไม่สำเร็จ", "error");
     return;
   }
 
-  showResult(`สร้างบัตร ${ticket.ticket_id} และส่ง QR ทาง LINE แล้ว`, "success");
+  showIssueResult(`สร้างบัตร ${ticket.ticket_id} และส่ง QR ทาง LINE แล้ว`, "success");
 }
 
 async function checkIn(rawCode) {
@@ -875,6 +876,11 @@ function normalizeScannedValue(value) {
 function showResult(message, type) {
   elements.scanResult.textContent = message;
   elements.scanResult.className = `scan-result ${type}`;
+}
+
+function showIssueResult(message, type) {
+  elements.issueResult.textContent = message;
+  elements.issueResult.className = `scan-result ${type}`;
 }
 
 function showLoginResult(message, type) {
