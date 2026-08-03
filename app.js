@@ -66,6 +66,7 @@ const db = supabaseReady
 
 document.addEventListener("DOMContentLoaded", async () => {
   wireEvents();
+  syncIssueDayToCurrentDay();
   renderDayControls();
   updateQuantityState();
 
@@ -97,8 +98,7 @@ function wireEvents() {
 
   elements.dayButtons.forEach((button) => {
     button.addEventListener("click", () => {
-      currentDay = normalizeEventDate(button.dataset.currentDay) || EVENT_DATES[0];
-      localStorage.setItem(currentDayKey, currentDay);
+      setCurrentDay(button.dataset.currentDay);
       render();
     });
   });
@@ -108,6 +108,10 @@ function wireEvents() {
     await issueTicket();
   });
   elements.ticketType.addEventListener("change", updateQuantityState);
+  elements.eventDay.addEventListener("change", () => {
+    setCurrentDay(elements.eventDay.value, false);
+    render();
+  });
   elements.ticketList.addEventListener("click", handleTicketAction);
 
   elements.manualCheckinForm.addEventListener("submit", async (event) => {
@@ -120,6 +124,18 @@ function wireEvents() {
   elements.stopScanner.addEventListener("click", stopScanner);
   elements.refreshData.addEventListener("click", loadData);
   elements.exportSales.addEventListener("click", exportSalesReport);
+}
+
+function setCurrentDay(value, shouldSyncIssueDay = true) {
+  currentDay = normalizeEventDate(value) || EVENT_DATES[0];
+  localStorage.setItem(currentDayKey, currentDay);
+  if (shouldSyncIssueDay) syncIssueDayToCurrentDay();
+}
+
+function syncIssueDayToCurrentDay() {
+  if (elements.eventDay && elements.eventDay.value !== currentDay) {
+    elements.eventDay.value = currentDay;
+  }
 }
 
 function restoreSession() {
@@ -884,6 +900,7 @@ function formatEventDate(value) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Bangkok",
   }).format(new Date(`${normalized}T00:00:00+07:00`));
 }
 

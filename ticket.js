@@ -93,6 +93,7 @@ function formatEventDate(value) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Bangkok",
   }).format(new Date(`${normalized}T00:00:00+07:00`));
 }
 
