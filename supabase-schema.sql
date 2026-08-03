@@ -109,7 +109,7 @@ begin
     v_ticket_id := 'VIP' || lpad(v_next::text, 3, '0');
     v_price := 2000;
     v_capacity := 4;
-    v_perks := 'เบียร์ 6 กระป๋อง, น้ำแข็ง 1 ชุด';
+    v_perks := 'พร้อมเครื่องดื่ม';
     v_codes := array[
       v_ticket_id || '-01',
       v_ticket_id || '-02',

@@ -31,6 +31,11 @@ alter table public.tickets add column if not exists canceled_at timestamptz;
 alter table public.tickets add column if not exists canceled_by text;
 alter table public.tickets add column if not exists cancel_reason text not null default '';
 
+update public.tickets
+set perks = 'พร้อมเครื่องดื่ม'
+where ticket_type = 'VIP'
+  and perks in ('เบียร์ 6 กระป๋อง, น้ำแข็ง 1 ชุด', 'เครื่องดื่ม');
+
 create index if not exists idx_admin_sessions_expires_at on public.admin_sessions (expires_at);
 create index if not exists idx_ticket_audit_logs_created_at on public.ticket_audit_logs (created_at desc);
 create index if not exists idx_ticket_audit_logs_ticket_id on public.ticket_audit_logs (ticket_id);
@@ -202,7 +207,7 @@ begin
     v_ticket_id := 'VIP' || lpad(v_next::text, 3, '0');
     v_price := 2000;
     v_capacity := 4;
-    v_perks := 'เบียร์ 6 กระป๋อง, น้ำแข็ง 1 ชุด';
+    v_perks := 'พร้อมเครื่องดื่ม';
     v_codes := array[
       v_ticket_id || '-01',
       v_ticket_id || '-02',
