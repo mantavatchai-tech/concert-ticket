@@ -230,7 +230,7 @@ async function loadData() {
   const [ticketResult, checkinResult, auditResult] = await Promise.all([
     db
       .from("tickets")
-      .select("id,ticket_type,event_day,buyer_name,line_user_id,price,capacity,perks,line_send_status,line_sent_at,line_send_error,issued_at,canceled_at,canceled_by,cancel_reason,ticket_codes(code,seat_no,checked_in_at,staff_name)")
+      .select("id,ticket_type,event_day,buyer_name,line_user_id,price,capacity,perks,issued_at,canceled_at,canceled_by,cancel_reason,ticket_codes(code,seat_no,checked_in_at,staff_name)")
       .order("issued_at", { ascending: false }),
     db
       .from("checkins")
@@ -343,7 +343,6 @@ async function issueTicket() {
     for (const issuedTicket of issuedTickets) {
       await sendTicketToLine(lineUserId, issuedTicket);
     }
-    await loadData();
   } else {
     const ticketIds = issuedTickets.map((ticket) => ticket.ticket_id).join(", ");
     showResult(`สร้างบัตร ${ticketIds} แล้ว`, "success");
@@ -375,28 +374,11 @@ async function sendTicketToLine(lineUserId, ticket) {
 
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const errorMessage = result.error || "ส่ง LINE ไม่สำเร็จ";
-    await markTicketLineStatus(ticket.ticket_id, "failed", errorMessage);
-    showResult(errorMessage, "error");
-    return false;
+    showResult(result.error || "ส่ง LINE ไม่สำเร็จ", "error");
+    return;
   }
 
-  await markTicketLineStatus(ticket.ticket_id, "sent", "");
   showResult(`สร้างบัตร ${ticket.ticket_id} และส่ง QR ทาง LINE แล้ว`, "success");
-  return true;
-}
-
-async function markTicketLineStatus(ticketId, status, errorMessage) {
-  const { error } = await db.rpc("update_ticket_line_status", {
-    p_ticket_id: ticketId,
-    p_status: status,
-    p_error: errorMessage || "",
-    p_session_token: currentSession.token,
-  });
-
-  if (error) {
-    showResult(`อัปเดตสถานะส่ง LINE ไม่สำเร็จ: ${error.message}`, "warning");
-  }
 }
 
 async function checkIn(rawCode) {
@@ -566,7 +548,6 @@ function renderTickets() {
         <p>วันบัตร: <strong>${formatEventDate(ticket.event_day)}</strong></p>
         <p>ลูกค้า: ${escapeHtml(ticket.buyer_name || "-")}</p>
         <p>LINE userId: ${escapeHtml(ticket.line_user_id || "-")}</p>
-        <p>สถานะ LINE: ${renderLineStatus(ticket)}</p>
         <p>ราคา: ${Number(ticket.price).toLocaleString("th-TH")} บาท · จำนวน ${ticket.capacity} คน</p>
         ${isCanceled ? `<p><strong>ยกเลิกแล้ว</strong>: ${escapeHtml(ticket.cancel_reason || "-")} (${escapeHtml(ticket.canceled_by || "-")})</p>` : ""}
         ${ticket.perks ? `<p>สิทธิ์: ${ticket.perks}</p>` : ""}
@@ -645,7 +626,7 @@ function exportSalesReport() {
   }
 
   const rows = [
-    ["ticket_id", "ticket_type", "event_day", "buyer_name", "price", "capacity", "line_send_status", "line_sent_at", "line_send_error", "status", "issued_at", "canceled_at", "cancel_reason"],
+    ["ticket_id", "ticket_type", "event_day", "buyer_name", "price", "capacity", "status", "issued_at", "canceled_at", "cancel_reason"],
     ...tickets.map((ticket) => [
       ticket.id,
       ticket.ticket_type,
@@ -653,9 +634,6 @@ function exportSalesReport() {
       ticket.buyer_name || "",
       ticket.price,
       ticket.capacity,
-      ticket.line_send_status || "not_sent",
-      ticket.line_sent_at || "",
-      ticket.line_send_error || "",
       ticket.canceled_at ? "canceled" : "active",
       ticket.issued_at,
       ticket.canceled_at || "",
@@ -860,7 +838,6 @@ function formatAuditAction(action) {
     update_price: "แก้ราคา",
     cancel: "ยกเลิกบัตร",
     checkin: "เช็คอิน",
-    line_status: "สถานะ LINE",
   };
   return labels[action] || action || "-";
 }
@@ -871,25 +848,7 @@ function formatAuditDetails(item) {
   if (item.action === "cancel") return details.reason || "-";
   if (item.action === "issue") return `${details.ticket_type || "-"} ${details.price || "-"} บาท ${details.event_day || ""}`.trim();
   if (item.action === "checkin") return `${details.code || "-"} โดย ${details.staff_name || "-"}`;
-  if (item.action === "line_status") return `${formatLineStatusText(details.old_status)} -> ${formatLineStatusText(details.new_status)}${details.error ? ` (${details.error})` : ""}`;
   return JSON.stringify(details);
-}
-
-function renderLineStatus(ticket) {
-  const status = ticket.line_send_status || "not_sent";
-  const label = formatLineStatusText(status);
-  const sentAt = ticket.line_sent_at ? ` ${new Date(ticket.line_sent_at).toLocaleString("th-TH")}` : "";
-  const error = ticket.line_send_error ? ` (${escapeHtml(ticket.line_send_error)})` : "";
-  return `<strong>${label}</strong>${sentAt}${error}`;
-}
-
-function formatLineStatusText(status) {
-  const labels = {
-    not_sent: "ยังไม่ส่ง",
-    sent: "ส่งแล้ว",
-    failed: "ส่งไม่สำเร็จ",
-  };
-  return labels[status] || status || "-";
 }
 
 function downloadCsv(filename, rows) {

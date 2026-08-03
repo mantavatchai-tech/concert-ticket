@@ -30,13 +30,6 @@ create table if not exists public.ticket_audit_logs (
 alter table public.tickets add column if not exists canceled_at timestamptz;
 alter table public.tickets add column if not exists canceled_by text;
 alter table public.tickets add column if not exists cancel_reason text not null default '';
-alter table public.tickets add column if not exists line_send_status text not null default 'not_sent';
-alter table public.tickets add column if not exists line_sent_at timestamptz;
-alter table public.tickets add column if not exists line_send_error text not null default '';
-
-alter table public.tickets drop constraint if exists tickets_line_send_status_check;
-alter table public.tickets add constraint tickets_line_send_status_check
-check (line_send_status in ('not_sent', 'sent', 'failed'));
 
 update public.tickets
 set perks = 'พร้อมเครื่องดื่ม'
@@ -439,56 +432,6 @@ begin
 end;
 $$;
 
-drop function if exists public.update_ticket_line_status(text, text, text, text);
-create or replace function public.update_ticket_line_status(
-  p_ticket_id text,
-  p_status text,
-  p_error text,
-  p_session_token text
-)
-returns jsonb
-language plpgsql
-security definer
-set search_path = public
-as $$
-declare
-  v_user public.admin_users%rowtype;
-  v_ticket public.tickets%rowtype;
-begin
-  v_user := public.require_admin_session(p_session_token, 'issue');
-
-  if p_status not in ('not_sent', 'sent', 'failed') then
-    raise exception 'สถานะส่ง LINE ไม่ถูกต้อง';
-  end if;
-
-  select * into v_ticket
-  from public.tickets
-  where id = upper(trim(p_ticket_id))
-  for update;
-
-  if not found then
-    raise exception 'ไม่พบบัตร';
-  end if;
-
-  update public.tickets
-  set line_send_status = p_status,
-      line_sent_at = case when p_status = 'sent' then now() else line_sent_at end,
-      line_send_error = case when p_status = 'failed' then left(coalesce(p_error, ''), 500) else '' end
-  where id = v_ticket.id;
-
-  insert into public.ticket_audit_logs (ticket_id, action, actor_username, actor_role, details)
-  values (
-    v_ticket.id,
-    'line_status',
-    v_user.username,
-    v_user.role,
-    jsonb_build_object('old_status', v_ticket.line_send_status, 'new_status', p_status, 'error', coalesce(p_error, ''))
-  );
-
-  return jsonb_build_object('ticket_id', v_ticket.id, 'line_send_status', p_status);
-end;
-$$;
-
 grant usage on schema public to anon;
 grant select on public.ticket_audit_logs to anon;
 revoke execute on function public.require_admin_session(text, text) from public;
@@ -499,7 +442,8 @@ grant execute on function public.issue_ticket(text, text, text, text, integer, t
 grant execute on function public.check_in_ticket(text, text, text, text) to anon;
 grant execute on function public.update_ticket_price(text, integer, text) to anon;
 grant execute on function public.cancel_ticket(text, text, text) to anon;
-grant execute on function public.update_ticket_line_status(text, text, text, text) to anon;
+
+drop function if exists public.update_ticket_line_status(text, text, text, text);
 
 -- ผู้ใช้เริ่มต้น 3 สิทธิ์
 -- เปลี่ยน password หลังรันจริงเพื่อความปลอดภัย
