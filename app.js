@@ -401,6 +401,12 @@ async function checkIn(rawCode) {
     return;
   }
 
+  const today = getBangkokDateKey();
+  if (currentDay !== today) {
+    showResult(`วันนี้คือ ${formatEventDate(today)} ยังไม่สามารถเช็คอินบัตรวันที่ ${formatEventDate(currentDay)} ได้`, "error");
+    return;
+  }
+
   const { data, error } = await db.rpc("check_in_ticket", {
     p_code: code,
     p_current_day: currentDay,
@@ -420,6 +426,11 @@ async function checkIn(rawCode) {
 
   if (data.status === "wrong_day") {
     showResult(`บัตรนี้ใช้สำหรับ ${formatEventDate(data.event_day)} ไม่อนุญาตให้เข้า`, "error");
+    return;
+  }
+
+  if (data.status === "not_event_day") {
+    showResult(`วันนี้คือ ${formatEventDate(data.today)} ยังไม่สามารถเช็คอินบัตรวันที่ ${formatEventDate(data.event_day)} ได้`, "error");
     return;
   }
 
@@ -908,6 +919,18 @@ function formatEventDate(value) {
     year: "numeric",
     timeZone: "Asia/Bangkok",
   }).format(new Date(`${normalized}T00:00:00+07:00`));
+}
+
+function getBangkokDateKey() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Bangkok",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
 }
 
 function escapeHtml(value) {

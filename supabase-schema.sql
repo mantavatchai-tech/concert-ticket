@@ -167,6 +167,7 @@ declare
   v_code public.ticket_codes%rowtype;
   v_ticket public.tickets%rowtype;
   v_now timestamptz := now();
+  v_today text := to_char((now() at time zone 'Asia/Bangkok')::date, 'YYYY-MM-DD');
 begin
   select * into v_code
   from public.ticket_codes
@@ -183,6 +184,10 @@ begin
 
   if v_ticket.event_day <> p_current_day then
     return jsonb_build_object('status', 'wrong_day', 'event_day', v_ticket.event_day);
+  end if;
+
+  if v_ticket.event_day <> v_today then
+    return jsonb_build_object('status', 'not_event_day', 'event_day', v_ticket.event_day, 'today', v_today);
   end if;
 
   if v_code.checked_in_at is not null then
