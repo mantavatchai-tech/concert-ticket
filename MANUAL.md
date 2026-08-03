@@ -201,7 +201,7 @@ Role ที่ใช้ได้:
 
 ```sql
 update public.admin_users
-set password_hash = crypt('NEW_STRONG_PASSWORD', gen_salt('bf'))
+set password_hash = extensions.crypt('NEW_STRONG_PASSWORD', extensions.gen_salt('bf'))
 where username = 'admin';
 ```
 
@@ -264,6 +264,21 @@ https://your-site.vercel.app
 - ต้อง deploy `app.js`
 - ไม่ต้องรัน SQL
 
+ตัวอย่างการแก้ข้อความหรือสิทธิ์ที่ถูกบันทึกตอนออกบัตร เช่น สิทธิ์ VIP:
+
+- ถ้าแก้ข้อความหน้าเว็บอย่างเดียว ให้ deploy `index.html`
+- ถ้าแก้ข้อความที่ระบบบันทึกลงบัตรตอนออกบัตรใหม่ ต้องรัน SQL ที่แก้ฟังก์ชันใน Supabase ด้วย เช่น `admin-features.sql`
+- ถ้าต้องการแก้บัตรเก่าที่ออกไปแล้ว ต้องรัน `update public.tickets ...` เพื่อเปลี่ยนข้อมูลเดิมในตาราง `tickets`
+
+ตัวอย่างแก้สิทธิ์ VIP เดิมให้เป็น `พร้อมเครื่องดื่ม`:
+
+```sql
+update public.tickets
+set perks = 'พร้อมเครื่องดื่ม'
+where ticket_type = 'VIP'
+  and perks in ('เบียร์ 6 กระป๋อง, น้ำแข็ง 1 ชุด', 'เครื่องดื่ม');
+```
+
 ## 9. วิธีใช้งานหน้าแอดมิน
 
 เปิด URL หลักของเว็บ:
@@ -289,6 +304,7 @@ https://your-site.vercel.app
 - VIP ราคา 2,000 บาท
 - VIP 1 ใบมี 4 QR
 - VIP จำกัด 30 ใบ
+- VIP แสดงสิทธิ์เป็น `พร้อมเครื่องดื่ม`
 - Regular เลือกราคาได้ 150 หรือ 180 บาท
 - Regular 1 ใบมี 1 QR
 - ถ้าติ๊กส่ง LINE แต่ไม่กรอกรหัสแอดมิน ระบบจะไม่สร้างบัตร
@@ -453,6 +469,13 @@ select * from public.line_customers order by last_seen_at desc;
 
 - ต้องรัน `update-event-dates.sql` ใน Supabase
 - ตรวจว่า deploy `app.js` และ `index.html` ใหม่แล้ว
+
+ออก VIP ใหม่แล้วยังขึ้นสิทธิ์เก่า เช่น เบียร์/น้ำแข็ง:
+
+- แปลว่า Supabase ยังใช้ฟังก์ชัน `issue_ticket` เวอร์ชันเก่า
+- ให้รัน `admin-features.sql` เวอร์ชันล่าสุดใน Supabase อีกครั้ง
+- ตรวจว่าในไฟล์มีบรรทัด `v_perks := 'พร้อมเครื่องดื่ม';`
+- ถ้าบัตรที่ออกไปแล้วต้องการแก้ด้วย ให้รัน SQL อัปเดต `public.tickets.perks`
 
 ส่ง LINE ไม่ได้:
 
