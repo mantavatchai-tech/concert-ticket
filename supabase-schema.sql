@@ -72,7 +72,8 @@ create or replace function public.issue_ticket(
   p_ticket_type text,
   p_event_day text,
   p_buyer_name text,
-  p_line_user_id text default null
+  p_line_user_id text default null,
+  p_ticket_price integer default null
 )
 returns jsonb
 language plpgsql
@@ -116,8 +117,12 @@ begin
       v_ticket_id || '-04'
     ];
   else
+    if coalesce(p_ticket_price, 150) not in (150, 180) then
+      raise exception 'ราคา Regular ไม่ถูกต้อง';
+    end if;
+
     v_ticket_id := 'REG' || lpad(v_next::text, 4, '0');
-    v_price := 150;
+    v_price := coalesce(p_ticket_price, 150);
     v_capacity := 1;
     v_perks := '';
     v_codes := array[v_ticket_id];
@@ -212,5 +217,5 @@ grant select on public.tickets to anon;
 grant select on public.ticket_codes to anon;
 grant select on public.checkins to anon;
 grant select on public.line_customers to anon;
-grant execute on function public.issue_ticket(text, text, text, text) to anon;
+grant execute on function public.issue_ticket(text, text, text, text, integer) to anon;
 grant execute on function public.check_in_ticket(text, text, text) to anon;

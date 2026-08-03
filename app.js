@@ -23,6 +23,7 @@ const elements = {
   vipRemaining: document.querySelector("#vipRemaining"),
   issueForm: document.querySelector("#issueForm"),
   ticketType: document.querySelector("#ticketType"),
+  ticketPrice: document.querySelector("#ticketPrice"),
   ticketQuantity: document.querySelector("#ticketQuantity"),
   eventDay: document.querySelector("#eventDay"),
   buyerName: document.querySelector("#buyerName"),
@@ -148,6 +149,7 @@ async function issueTicket() {
   const eventDay = elements.eventDay.value;
   const buyerName = elements.buyerName.value.trim() || "-";
   const lineUserId = elements.lineUserId.value.trim();
+  const ticketPrice = ticketType === "Regular" ? clampRegularPrice(elements.ticketPrice.value) : null;
   const quantity = ticketType === "Regular" ? clampQuantity(elements.ticketQuantity.value) : 1;
   const issuedTickets = [];
 
@@ -159,6 +161,7 @@ async function issueTicket() {
       p_event_day: eventDay,
       p_buyer_name: numberedName,
       p_line_user_id: lineUserId || null,
+      p_ticket_price: ticketPrice,
     });
 
     if (error) {
@@ -506,7 +509,9 @@ function getTicketUrl(ticketId) {
 
 function updateQuantityState() {
   const isRegular = elements.ticketType.value === "Regular";
+  elements.ticketPrice.disabled = !isRegular;
   elements.ticketQuantity.disabled = !isRegular;
+  elements.ticketPrice.value = isRegular ? elements.ticketPrice.value || "150" : "150";
   elements.ticketQuantity.value = isRegular ? elements.ticketQuantity.value || "1" : "1";
 }
 
@@ -514,6 +519,11 @@ function clampQuantity(value) {
   const quantity = Number.parseInt(value, 10);
   if (Number.isNaN(quantity)) return 1;
   return Math.min(Math.max(quantity, 1), 50);
+}
+
+function clampRegularPrice(value) {
+  const price = Number.parseInt(value, 10);
+  return [150, 180].includes(price) ? price : 150;
 }
 
 function normalizeScannedValue(value) {

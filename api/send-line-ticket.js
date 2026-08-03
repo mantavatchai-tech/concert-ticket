@@ -20,6 +20,7 @@ function buildMessages(baseUrl, ticket) {
     ticket.perks ? `สิทธิ์ VIP: ${ticket.perks}` : "",
     "",
     "แสดง QR นี้ที่จุดเข้างาน",
+    `หน้าบัตร: ${baseUrl}/ticket.html?id=${encodeURIComponent(ticket.ticket_id)}`,
   ].filter(Boolean).join("\n");
 
   const imageMessages = codes.slice(0, 4).map((code) => ({
