@@ -1,4 +1,4 @@
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists public.admin_users (
   id uuid primary key default gen_random_uuid(),
@@ -120,7 +120,7 @@ begin
   where lower(username) = lower(trim(p_username))
     and active = true;
 
-  if not found or v_user.password_hash <> crypt(p_password, v_user.password_hash) then
+  if not found or v_user.password_hash <> extensions.crypt(p_password, v_user.password_hash) then
     raise exception 'Username หรือ Password ไม่ถูกต้อง';
   end if;
 
@@ -148,6 +148,8 @@ as $$
 begin
   delete from public.admin_sessions
   where token = p_session_token::uuid;
+exception when others then
+  return;
 end;
 $$;
 
@@ -440,7 +442,7 @@ grant execute on function public.cancel_ticket(text, text, text) to anon;
 -- เปลี่ยน password หลังรันจริงเพื่อความปลอดภัย
 insert into public.admin_users (username, password_hash, display_name, role)
 values
-  ('admin', crypt('Admin@1234', gen_salt('bf')), 'Admin', 'admin'),
-  ('issuer', crypt('Issuer@1234', gen_salt('bf')), 'Ticket Issuer', 'issuer'),
-  ('checkin', crypt('Checkin@1234', gen_salt('bf')), 'Check-in Staff', 'checkin')
+  ('admin', extensions.crypt('Admin@1234', extensions.gen_salt('bf')), 'Admin', 'admin'),
+  ('issuer', extensions.crypt('Issuer@1234', extensions.gen_salt('bf')), 'Ticket Issuer', 'issuer'),
+  ('checkin', extensions.crypt('Checkin@1234', extensions.gen_salt('bf')), 'Check-in Staff', 'checkin')
 on conflict (username) do nothing;

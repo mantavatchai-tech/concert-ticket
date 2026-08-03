@@ -161,14 +161,15 @@ async function login() {
 }
 
 async function logout() {
-  if (db && currentSession?.token) {
-    await db.rpc("admin_logout", { p_session_token: currentSession.token }).catch(() => {});
-  }
+  const token = currentSession?.token;
   currentSession = null;
   localStorage.removeItem(sessionKey);
   stopScanner();
   unsubscribeFromChanges();
   showLogin();
+  if (db && token) {
+    db.rpc("admin_logout", { p_session_token: token }).catch(() => {});
+  }
 }
 
 function showLogin() {
