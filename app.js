@@ -231,7 +231,13 @@ async function checkIn(rawCode) {
     return;
   }
 
-  const staffName = elements.staffName.value.trim() || "ไม่ระบุ";
+  const staffName = elements.staffName.value.trim();
+  if (!staffName) {
+    showResult("กรุณากรอกชื่อเจ้าหน้าที่ก่อนเช็คอิน", "warning");
+    elements.staffName.focus();
+    return;
+  }
+
   const { data, error } = await db.rpc("check_in_ticket", {
     p_code: code,
     p_current_day: currentDay,
