@@ -149,9 +149,16 @@ async function issueTicket() {
   const eventDay = elements.eventDay.value;
   const buyerName = elements.buyerName.value.trim() || "-";
   const lineUserId = elements.lineUserId.value.trim();
+  const adminPin = elements.adminPin.value.trim();
   const ticketPrice = ticketType === "Regular" ? clampRegularPrice(elements.ticketPrice.value) : null;
   const quantity = ticketType === "Regular" ? clampQuantity(elements.ticketQuantity.value) : 1;
   const issuedTickets = [];
+
+  if (elements.sendLine.checked && !adminPin) {
+    showResult("กรุณากรอกรหัสแอดมินก่อนออกบัตรและส่ง LINE OA", "warning");
+    elements.adminPin.focus();
+    return;
+  }
 
   showResult(`กำลังสร้างบัตร ${quantity} ใบ`, "neutral");
   for (let index = 0; index < quantity; index += 1) {
@@ -191,7 +198,7 @@ async function issueTicket() {
 async function sendTicketToLine(lineUserId, ticket) {
   const adminPin = elements.adminPin.value.trim();
   if (!adminPin) {
-    showResult(`สร้างบัตร ${ticket.ticket_id} แล้ว แต่ยังไม่ได้ส่ง LINE เพราะไม่ได้กรอกรหัสแอดมิน`, "warning");
+    showResult("ไม่ได้ส่ง LINE เพราะไม่ได้กรอกรหัสแอดมิน", "warning");
     return;
   }
 
