@@ -39,31 +39,30 @@ async function getLineProfile(userId) {
   return response.json();
 }
 
-async function hasLineCustomer(userId) {
+const REGISTRATION_REPLY_TEXT =
+  "รับข้อมูลแล้วค่ะ ต้องการซื้อบัตรคอนเสิร์ตวันไหนแจ้งแอดมินได้เลยค่ะ หรือสอบถามรายละเอียดได้เลยค่ะ\nเมื่อตรวจสอบการชำระเงินเรียบร้อย ทีมงานจะส่ง QR บัตรคอนเสิร์ตให้ทางแชทนี้";
+
+async function updateCustomer(userId, payload) {
   const params = new URLSearchParams({
-    select: "line_user_id",
     line_user_id: `eq.${userId}`,
-    limit: "1",
   });
 
-  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers?${params}`, {
+  await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers?${params}`, {
+    method: "PATCH",
     headers: {
+      "Content-Type": "application/json",
       apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      Prefer: "return=minimal",
     },
+    body: JSON.stringify(payload),
   });
-
-  if (!response.ok) return false;
-
-  const customers = await response.json();
-  return Array.isArray(customers) && customers.length > 0;
 }
 
 async function upsertCustomer(event) {
   const userId = event.source?.userId;
   if (!userId) return false;
 
-  const alreadyRegistered = await hasLineCustomer(userId);
   const profile = await getLineProfile(userId);
   const payload = {
     line_user_id: userId,
@@ -74,18 +73,21 @@ async function upsertCustomer(event) {
     last_seen_at: new Date().toISOString(),
   };
 
-  await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers`, {
+  const createResponse = await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      Prefer: "resolution=merge-duplicates",
+      Prefer: "return=minimal",
     },
     body: JSON.stringify(payload),
   });
 
-  return !alreadyRegistered;
+  if (createResponse.status === 201) return true;
+
+  await updateCustomer(userId, payload);
+  return false;
 }
 
 async function replyRegistration(event) {
@@ -102,7 +104,7 @@ async function replyRegistration(event) {
       messages: [
         {
           type: "text",
-          text: "รับข้อมูลแล้วค่ะ ต้องการซื้อบัตรคอนเสิร์ตวันไหนแจ้งแอดมินได้เลยค่ะ หรือสอบถามรายละเอียดได้เลยค่ะ เมื่อตรวจสอบการชำระเงินเรียบร้อย ทีมงานจะส่ง QR บัตรคอนเสิร์ตให้ทางแชทนี้",
+          text: REGISTRATION_REPLY_TEXT,
         },
       ],
     }),
