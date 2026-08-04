@@ -39,9 +39,29 @@ async function getLineProfile(userId) {
   return response.json();
 }
 
+const REGISTRATION_REPLY_TEXT =
+  "รับข้อมูลแล้วค่ะ ต้องการซื้อบัตรคอนเสิร์ตวันไหนแจ้งแอดมินได้เลยค่ะ หรือสอบถามรายละเอียดได้เลยค่ะ\nเมื่อตรวจสอบการชำระเงินเรียบร้อย ทีมงานจะส่ง QR บัตรคอนเสิร์ตให้ทางแชทนี้";
+
+async function updateCustomer(userId, payload) {
+  const params = new URLSearchParams({
+    line_user_id: `eq.${userId}`,
+  });
+
+  await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers?${params}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+      Prefer: "return=minimal",
+    },
+    body: JSON.stringify(payload),
+  });
+}
+
 async function upsertCustomer(event) {
   const userId = event.source?.userId;
-  if (!userId) return;
+  if (!userId) return false;
 
   const profile = await getLineProfile(userId);
   const payload = {
@@ -53,16 +73,21 @@ async function upsertCustomer(event) {
     last_seen_at: new Date().toISOString(),
   };
 
-  await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers`, {
+  const createResponse = await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
       Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      Prefer: "resolution=merge-duplicates",
+      Prefer: "return=minimal",
     },
     body: JSON.stringify(payload),
   });
+
+  if (createResponse.status === 201) return true;
+
+  await updateCustomer(userId, payload);
+  return false;
 }
 
 async function replyRegistration(event) {
@@ -79,7 +104,7 @@ async function replyRegistration(event) {
       messages: [
         {
           type: "text",
-          text: "รับข้อมูลแล้วค่ะ เมื่อตรวจสอบการชำระเงินเรียบร้อย ทีมงานจะส่ง QR บัตรคอนเสิร์ตให้ทางแชทนี้",
+          text: REGISTRATION_REPLY_TEXT,
         },
       ],
     }),
@@ -103,13 +128,16 @@ module.exports = async function handler(request, response) {
 
   const body = JSON.parse(rawBody.toString("utf8"));
   const events = Array.isArray(body.events) ? body.events : [];
+  const repliedUserIds = new Set();
 
-  await Promise.all(events.map(async (event) => {
-    await upsertCustomer(event);
-    if (event.type === "follow" || event.type === "message") {
+  for (const event of events) {
+    const userId = event.source?.userId;
+    const isNewCustomer = await upsertCustomer(event);
+    if (isNewCustomer && userId && !repliedUserIds.has(userId) && (event.type === "follow" || event.type === "message")) {
       await replyRegistration(event);
+      repliedUserIds.add(userId);
     }
-  }));
+  }
 
   response.status(200).json({ ok: true });
 };
