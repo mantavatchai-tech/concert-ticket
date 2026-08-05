@@ -587,7 +587,7 @@ function renderQrCodes() {
     const code = box.dataset.qr;
     box.innerHTML = "";
     if (window.QRCode) {
-      new QRCode(box, { text: code, width: 112, height: 112, correctLevel: QRCode.CorrectLevel.M });
+      new QRCode(box, { text: code, width: 78, height: 78, correctLevel: QRCode.CorrectLevel.M });
       return;
     }
     box.textContent = code;
