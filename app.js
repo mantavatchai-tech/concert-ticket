@@ -33,6 +33,7 @@ const elements = {
   todayCheckins: document.querySelector("#todayCheckins"),
   totalCheckins: document.querySelector("#totalCheckins"),
   totalIssued: document.querySelector("#totalIssued"),
+  totalCanceled: document.querySelector("#totalCanceled"),
   vipRemaining: document.querySelector("#vipRemaining"),
   issueForm: document.querySelector("#issueForm"),
   ticketType: document.querySelector("#ticketType"),
@@ -518,10 +519,12 @@ function renderDayControls() {
 function renderMetrics() {
   const todayCount = checkins.filter((item) => item.event_day === currentDay).length;
   const totalCodes = tickets.reduce((sum, ticket) => sum + ticket.ticket_codes.length, 0);
+  const totalCanceled = tickets.filter((ticket) => ticket.canceled_at).length;
   const vipSold = tickets.filter((ticket) => ticket.ticket_type === "VIP").length;
   elements.todayCheckins.textContent = todayCount;
   elements.totalCheckins.textContent = checkins.length;
   elements.totalIssued.textContent = totalCodes;
+  elements.totalCanceled.textContent = totalCanceled;
   elements.vipRemaining.textContent = VIP_LIMIT - vipSold;
 }
 
