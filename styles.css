@@ -359,48 +359,49 @@ select {
 
 .ticket-list {
   display: grid;
-  gap: 12px;
+  gap: 8px;
 }
 
 .ticket-card {
   display: grid;
-  grid-template-columns: minmax(160px, 0.72fr) minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(118px, 0.32fr) minmax(0, 1fr);
+  gap: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  padding: 12px;
+  padding: 8px 10px;
   background: #fbfcfe;
 }
 
 .ticket-qr-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fit, minmax(58px, 1fr));
+  gap: 6px;
   align-content: start;
 }
 
 .ticket-qr-item {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   justify-items: center;
   color: var(--ink);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.2;
 }
 
 .qr-box {
   display: grid;
   place-items: center;
-  min-height: 92px;
+  min-height: 68px;
   background: #fff;
   border: 1px solid #e4e7ec;
   border-radius: 8px;
-  padding: 6px;
+  padding: 5px;
 }
 
 .qr-box canvas,
 .qr-box img {
-  max-width: 78px;
-  max-height: 78px;
+  max-width: 58px;
+  max-height: 58px;
 }
 
 .ticket-meta {
@@ -408,28 +409,32 @@ select {
 }
 
 .ticket-meta h3 {
-  margin: 0 0 8px;
-  font-size: 18px;
+  margin: 0 0 5px;
+  font-size: 16px;
+  line-height: 1.25;
 }
 
 .ticket-meta p {
-  margin: 4px 0;
+  margin: 2px 0;
   color: var(--muted);
+  font-size: 13px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
 }
 
 .code-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  gap: 4px;
+  margin-top: 6px;
 }
 
 .code-pill {
   border-radius: 999px;
   border: 1px solid var(--line);
   background: #fff;
-  padding: 6px 9px;
-  font-size: 13px;
+  padding: 3px 7px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -453,12 +458,14 @@ select {
 .ticket-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .ticket-actions button {
-  min-height: 38px;
+  min-height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
 }
 
 .ticket-page {
