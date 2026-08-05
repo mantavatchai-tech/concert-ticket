@@ -529,7 +529,7 @@ function renderLineCustomers() {
   elements.lineCustomerList.innerHTML = lineCustomers
     .map((customer) => {
       const label = customer.display_name ? `${customer.display_name} - ${customer.line_user_id}` : customer.line_user_id;
-      return `<option value="${escapeHtml(customer.line_user_id)}" label="${escapeHtml(label)}"></option>`;
+      return `<option value="${escapeHtml(customer.line_user_id)}" label="${escapeHtml(label)}">${escapeHtml(label)}</option>`;
     })
     .join("");
 }
