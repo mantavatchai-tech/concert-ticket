@@ -518,9 +518,11 @@ function renderDayControls() {
 
 function renderMetrics() {
   const todayCount = checkins.filter((item) => item.event_day === currentDay).length;
-  const totalCodes = tickets.reduce((sum, ticket) => sum + ticket.ticket_codes.length, 0);
+  const totalCodes = tickets
+    .filter((ticket) => !ticket.canceled_at)
+    .reduce((sum, ticket) => sum + ticket.ticket_codes.length, 0);
   const totalCanceled = tickets.filter((ticket) => ticket.canceled_at).length;
-  const vipSold = tickets.filter((ticket) => ticket.ticket_type === "VIP").length;
+  const vipSold = tickets.filter((ticket) => ticket.ticket_type === "VIP" && !ticket.canceled_at).length;
   elements.todayCheckins.textContent = todayCount;
   elements.totalCheckins.textContent = checkins.length;
   elements.totalIssued.textContent = totalCodes;
