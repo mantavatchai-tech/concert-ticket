@@ -183,6 +183,7 @@ declare
   v_capacity integer;
   v_perks text;
   v_codes text[];
+  v_vip_sold integer;
 begin
   v_user := public.require_admin_session(p_session_token, 'issue');
 
@@ -199,8 +200,16 @@ begin
   where ticket_type = p_ticket_type
   for update;
 
-  if p_ticket_type = 'VIP' and v_next > 48 then
-    raise exception 'VIP เต็มแล้ว ออกบัตรเพิ่มไม่ได้';
+  if p_ticket_type = 'VIP' then
+    select count(*) into v_vip_sold
+    from public.tickets
+    where ticket_type = 'VIP'
+      and event_day = p_event_day
+      and canceled_at is null;
+
+    if v_vip_sold >= 48 then
+      raise exception 'VIP ของวันนี้เต็มแล้ว ออกบัตรเพิ่มไม่ได้';
+    end if;
   end if;
 
   if p_ticket_type = 'VIP' then

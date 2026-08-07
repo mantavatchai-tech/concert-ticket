@@ -35,6 +35,7 @@ const elements = {
   totalIssued: document.querySelector("#totalIssued"),
   totalCanceled: document.querySelector("#totalCanceled"),
   vipRemaining: document.querySelector("#vipRemaining"),
+  vipDailyBreakdown: document.querySelector("#vipDailyBreakdown"),
   issueForm: document.querySelector("#issueForm"),
   ticketType: document.querySelector("#ticketType"),
   ticketPrice: document.querySelector("#ticketPrice"),
@@ -522,12 +523,17 @@ function renderMetrics() {
     .filter((ticket) => !ticket.canceled_at)
     .reduce((sum, ticket) => sum + ticket.ticket_codes.length, 0);
   const totalCanceled = tickets.filter((ticket) => ticket.canceled_at).length;
-  const vipSold = tickets.filter((ticket) => ticket.ticket_type === "VIP" && !ticket.canceled_at).length;
+  const vipSold = tickets.filter((ticket) => ticket.ticket_type === "VIP" && ticket.event_day === currentDay && !ticket.canceled_at).length;
+  const vipByDay = EVENT_DATES.map((eventDay) => {
+    const sold = tickets.filter((ticket) => ticket.ticket_type === "VIP" && ticket.event_day === eventDay && !ticket.canceled_at).length;
+    return `<span>${formatShortEventDate(eventDay)}: <b>${VIP_LIMIT - sold}</b></span>`;
+  }).join("");
   elements.todayCheckins.textContent = todayCount;
   elements.totalCheckins.textContent = checkins.length;
   elements.totalIssued.textContent = totalCodes;
   elements.totalCanceled.textContent = totalCanceled;
   elements.vipRemaining.textContent = VIP_LIMIT - vipSold;
+  elements.vipDailyBreakdown.innerHTML = vipByDay;
 }
 
 function renderLineCustomers() {
@@ -922,6 +928,16 @@ function formatEventDate(value) {
     day: "numeric",
     month: "short",
     year: "numeric",
+    timeZone: "Asia/Bangkok",
+  }).format(new Date(`${normalized}T00:00:00+07:00`));
+}
+
+function formatShortEventDate(value) {
+  const normalized = normalizeEventDate(value) || value;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized || "-";
+  return new Intl.DateTimeFormat("th-TH", {
+    day: "numeric",
+    month: "short",
     timeZone: "Asia/Bangkok",
   }).format(new Date(`${normalized}T00:00:00+07:00`));
 }
