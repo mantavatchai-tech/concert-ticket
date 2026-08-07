@@ -101,7 +101,7 @@ begin
   where ticket_type = p_ticket_type
   for update;
 
-  if p_ticket_type = 'VIP' and v_next > 30 then
+  if p_ticket_type = 'VIP' and v_next > 48 then
     raise exception 'VIP เต็มแล้ว ออกบัตรเพิ่มไม่ได้';
   end if;
 

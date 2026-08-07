@@ -207,6 +207,10 @@ main {
   line-height: 1.1;
 }
 
+#vipRemaining {
+  color: var(--danger);
+}
+
 .workbench,
 .tables {
   display: grid;

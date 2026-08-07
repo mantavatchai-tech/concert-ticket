@@ -1,4 +1,4 @@
-const VIP_LIMIT = 30;
+const VIP_LIMIT = 48;
 const EVENT_DATES = ["2026-08-27", "2026-08-28", "2026-08-30", "2026-09-06"];
 const APP_CONFIG = window.APP_CONFIG || {};
 const currentDayKey = "concert-current-day";
