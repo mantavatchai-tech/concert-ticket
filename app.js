@@ -33,6 +33,8 @@ const elements = {
   todayCheckins: document.querySelector("#todayCheckins"),
   totalCheckins: document.querySelector("#totalCheckins"),
   totalIssued: document.querySelector("#totalIssued"),
+  regularSold: document.querySelector("#regularSold"),
+  regularDailyBreakdown: document.querySelector("#regularDailyBreakdown"),
   totalCanceled: document.querySelector("#totalCanceled"),
   vipRemaining: document.querySelector("#vipRemaining"),
   vipDailyBreakdown: document.querySelector("#vipDailyBreakdown"),
@@ -522,6 +524,11 @@ function renderMetrics() {
   const totalCodes = tickets
     .filter((ticket) => !ticket.canceled_at)
     .reduce((sum, ticket) => sum + ticket.ticket_codes.length, 0);
+  const regularSold = tickets.filter((ticket) => ticket.ticket_type === "Regular" && !ticket.canceled_at).length;
+  const regularByDay = EVENT_DATES.map((eventDay) => {
+    const sold = tickets.filter((ticket) => ticket.ticket_type === "Regular" && ticket.event_day === eventDay && !ticket.canceled_at).length;
+    return `<span>${formatShortEventDate(eventDay)}: <b>${sold}</b></span>`;
+  }).join("");
   const totalCanceled = tickets.filter((ticket) => ticket.canceled_at).length;
   const vipSold = tickets.filter((ticket) => ticket.ticket_type === "VIP" && ticket.event_day === currentDay && !ticket.canceled_at).length;
   const vipByDay = EVENT_DATES.map((eventDay) => {
@@ -531,6 +538,8 @@ function renderMetrics() {
   elements.todayCheckins.textContent = todayCount;
   elements.totalCheckins.textContent = checkins.length;
   elements.totalIssued.textContent = totalCodes;
+  elements.regularSold.textContent = regularSold;
+  elements.regularDailyBreakdown.innerHTML = regularByDay;
   elements.totalCanceled.textContent = totalCanceled;
   elements.vipRemaining.textContent = VIP_LIMIT - vipSold;
   elements.vipDailyBreakdown.innerHTML = vipByDay;
