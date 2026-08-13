@@ -16,6 +16,7 @@ let realtimeChannel = null;
 let detector = null;
 let lastScanValue = "";
 let lastScanAt = 0;
+let pendingScanValue = "";
 
 const elements = {
   loginView: document.querySelector("#loginView"),
@@ -58,6 +59,10 @@ const elements = {
   scanResult: document.querySelector("#scanResult"),
   startScanner: document.querySelector("#startScanner"),
   stopScanner: document.querySelector("#stopScanner"),
+  scanConfirmBox: document.querySelector("#scanConfirmBox"),
+  pendingScanCode: document.querySelector("#pendingScanCode"),
+  confirmScan: document.querySelector("#confirmScan"),
+  cancelScan: document.querySelector("#cancelScan"),
   scannerVideo: document.querySelector("#scannerVideo"),
   scannerPlaceholder: document.querySelector("#scannerPlaceholder"),
   refreshData: document.querySelector("#refreshData"),
@@ -127,6 +132,8 @@ function wireEvents() {
 
   elements.startScanner.addEventListener("click", startScanner);
   elements.stopScanner.addEventListener("click", stopScanner);
+  elements.confirmScan.addEventListener("click", confirmPendingScan);
+  elements.cancelScan.addEventListener("click", cancelPendingScan);
   elements.refreshData.addEventListener("click", loadData);
   elements.exportSales.addEventListener("click", exportSalesReport);
 }
@@ -468,7 +475,7 @@ async function startScanner() {
     elements.scannerVideo.srcObject = scannerStream;
     elements.scannerPlaceholder.style.display = "none";
     await elements.scannerVideo.play();
-    scannerTimer = window.setInterval(scanFrame, 650);
+    resumeScanner();
     showResult("เปิดกล้องแล้ว พร้อมสแกน", "neutral");
   } catch {
     showResult("เปิดกล้องไม่ได้ กรุณาอนุญาตสิทธิ์กล้องหรือกรอกรหัสแทน", "error");
@@ -480,12 +487,13 @@ function stopScanner() {
   scannerTimer = null;
   if (scannerStream) scannerStream.getTracks().forEach((track) => track.stop());
   scannerStream = null;
+  clearPendingScan();
   elements.scannerVideo.srcObject = null;
   elements.scannerPlaceholder.style.display = "grid";
 }
 
 async function scanFrame() {
-  if (!detector || !elements.scannerVideo.videoWidth) return;
+  if (!detector || pendingScanValue || !elements.scannerVideo.videoWidth) return;
 
   try {
     const codes = await detector.detect(elements.scannerVideo);
@@ -497,10 +505,40 @@ async function scanFrame() {
 
     lastScanValue = value;
     lastScanAt = now;
-    await checkIn(value);
+    pendingScanValue = value;
+    if (scannerTimer) window.clearInterval(scannerTimer);
+    scannerTimer = null;
+    elements.pendingScanCode.textContent = normalizeScannedValue(value) || value;
+    elements.scanConfirmBox.hidden = false;
+    showResult("พบ QR แล้ว กรุณากดยืนยันก่อนเช็คอิน", "warning");
   } catch {
     showResult("อ่าน QR ไม่สำเร็จ ลองขยับกล้องหรือกรอกรหัสแทน", "warning");
   }
+}
+
+async function confirmPendingScan() {
+  if (!pendingScanValue) return;
+  const value = pendingScanValue;
+  clearPendingScan();
+  await checkIn(value);
+  resumeScanner();
+}
+
+function cancelPendingScan() {
+  clearPendingScan();
+  showResult("ยกเลิก QR ที่อ่านได้แล้ว พร้อมสแกนใหม่", "neutral");
+  resumeScanner();
+}
+
+function clearPendingScan() {
+  pendingScanValue = "";
+  elements.pendingScanCode.textContent = "-";
+  elements.scanConfirmBox.hidden = true;
+}
+
+function resumeScanner() {
+  if (!scannerStream || scannerTimer) return;
+  scannerTimer = window.setInterval(scanFrame, 650);
 }
 
 function render() {

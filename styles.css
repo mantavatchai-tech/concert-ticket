@@ -284,6 +284,24 @@ main {
   border: 1px dashed rgba(255, 255, 255, 0.35);
 }
 
+.scan-confirm {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #fedf89;
+  border-radius: 8px;
+  background: var(--warn-bg);
+  color: #7a4b00;
+}
+
+.scan-confirm[hidden] {
+  display: none;
+}
+
+.scan-confirm strong {
+  color: var(--ink);
+}
+
 form,
 .scanner-panel {
   display: grid;

@@ -97,6 +97,14 @@
             <button id="stopScanner" class="ghost-button">ปิดกล้อง</button>
           </div>
 
+          <div id="scanConfirmBox" class="scan-confirm" hidden>
+            <span>พบ QR: <strong id="pendingScanCode">-</strong></span>
+            <div class="control-row">
+              <button id="confirmScan" class="primary-button" type="button">ยืนยันเช็คอิน</button>
+              <button id="cancelScan" class="ghost-button" type="button">สแกนใหม่</button>
+            </div>
+          </div>
+
           <form id="manualCheckinForm" class="manual-form">
             <label for="manualCode">กรอกรหัส QR</label>
             <div class="inline-input">
