@@ -593,13 +593,15 @@ function renderLineCustomers() {
 }
 
 function renderTickets() {
-  if (!tickets.length) {
-    elements.ticketList.innerHTML = `<p class="empty-state">ยังไม่มีบัตรที่ออก</p>`;
+  const dayTickets = tickets.filter((ticket) => ticket.event_day === currentDay);
+
+  if (!dayTickets.length) {
+    elements.ticketList.innerHTML = `<p class="empty-state">ยังไม่มีบัตรที่ออกสำหรับ ${formatEventDate(currentDay)}</p>`;
     return;
   }
 
   elements.ticketList.innerHTML = "";
-  tickets.forEach((ticket) => {
+  dayTickets.forEach((ticket) => {
     const codes = getSortedCodes(ticket);
     const isCanceled = Boolean(ticket.canceled_at);
     const card = document.createElement("article");
