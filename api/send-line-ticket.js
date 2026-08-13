@@ -56,6 +56,14 @@ async function readLineError(lineResponse) {
   }
 }
 
+function getLineErrorHint(status) {
+  if (status === 400) return "ตรวจสอบ LINE userId ว่าถูกต้อง และลูกค้าต้องเพิ่มเพื่อน LINE OA แล้ว";
+  if (status === 401) return "ตรวจสอบ LINE_CHANNEL_ACCESS_TOKEN ใน Vercel ว่าถูกต้องและเป็น Channel access token ล่าสุด";
+  if (status === 403) return "LINE OA หรือ token ไม่มีสิทธิ์ส่ง Push message";
+  if (status === 429) return "LINE จำกัดจำนวนการส่งชั่วคราว กรุณารอสักครู่แล้วลองใหม่";
+  return "ตรวจสอบ LINE userId, LINE token, และสถานะเพื่อนของลูกค้ากับ LINE OA";
+}
+
 function formatEventDate(value) {
   const legacyMap = {
     "Day 1": "2026-08-27",
@@ -117,7 +125,10 @@ module.exports = async function handler(request, response) {
     const fallbackDetails = await readLineError(fallbackResponse);
     response.status(lineResponse.status).json({
       error: "LINE push message failed",
+      status: lineResponse.status,
       details,
+      hint: getLineErrorHint(lineResponse.status),
+      fallbackStatus: fallbackResponse.status,
       fallbackDetails,
     });
     return;

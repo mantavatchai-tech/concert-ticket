@@ -392,7 +392,9 @@ async function sendTicketToLine(lineUserId, ticket) {
 
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const details = result.details || result.fallbackDetails || "";
+    const details = [result.status ? `status ${result.status}` : "", result.details, result.hint]
+      .filter(Boolean)
+      .join(" · ");
     showIssueResult(`${result.error || "ส่ง LINE ไม่สำเร็จ"}${details ? `: ${details}` : ""}`, "error");
     return;
   }
