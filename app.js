@@ -52,6 +52,7 @@ const elements = {
   sendLine: document.querySelector("#sendLine"),
   ticketList: document.querySelector("#ticketList"),
   checkinLog: document.querySelector("#checkinLog"),
+  auditPanel: document.querySelector(".audit-panel"),
   auditLog: document.querySelector("#auditLog"),
   manualCheckinForm: document.querySelector("#manualCheckinForm"),
   manualCode: document.querySelector("#manualCode"),
@@ -219,9 +220,11 @@ function applyRoleUi() {
   const canIssueTickets = hasRolePermission("issue");
   const canCheckInTickets = hasRolePermission("checkin");
   const canExportSales = hasRolePermission("export");
+  const canViewAuditLog = currentSession?.role === "admin";
 
   document.querySelector(".issue-panel").hidden = !canIssueTickets;
   document.querySelector(".scanner-panel").hidden = !canCheckInTickets;
+  elements.auditPanel.hidden = !canViewAuditLog;
   elements.exportSales.hidden = !canExportSales;
 }
 
@@ -238,6 +241,13 @@ function hasRolePermission(permission) {
 async function loadData() {
   if (!db || !currentSession) return;
   showResult("กำลังโหลดข้อมูลจากฐานข้อมูลกลาง", "neutral");
+  const auditQuery = currentSession.role === "admin"
+    ? db
+      .from("ticket_audit_logs")
+      .select("ticket_id,action,actor_username,actor_role,details,created_at")
+      .order("created_at", { ascending: false })
+      .limit(100)
+    : Promise.resolve({ data: [], error: null });
 
   const [ticketResult, checkinResult, auditResult] = await Promise.all([
     db
@@ -249,11 +259,7 @@ async function loadData() {
       .select("code,ticket_id,ticket_type,event_day,staff_name,checked_in_at")
       .order("checked_in_at", { ascending: false })
       .limit(200),
-    db
-      .from("ticket_audit_logs")
-      .select("ticket_id,action,actor_username,actor_role,details,created_at")
-      .order("created_at", { ascending: false })
-      .limit(100),
+    auditQuery,
     loadLineCustomers(),
   ]);
 
@@ -673,6 +679,11 @@ function renderCheckins() {
 }
 
 function renderAuditLog() {
+  if (currentSession?.role !== "admin") {
+    elements.auditLog.innerHTML = "";
+    return;
+  }
+
   if (!auditLogs.length) {
     elements.auditLog.innerHTML = `<tr><td colspan="5">ยังไม่มีประวัติการแก้ไข</td></tr>`;
     return;
