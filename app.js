@@ -392,11 +392,12 @@ async function sendTicketToLine(lineUserId, ticket) {
 
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    showIssueResult(result.error || "ส่ง LINE ไม่สำเร็จ", "error");
+    const details = result.details || result.fallbackDetails || "";
+    showIssueResult(`${result.error || "ส่ง LINE ไม่สำเร็จ"}${details ? `: ${details}` : ""}`, "error");
     return;
   }
 
-  showIssueResult(`สร้างบัตร ${ticket.ticket_id} และส่ง QR ทาง LINE แล้ว`, "success");
+  showIssueResult(result.warning || `สร้างบัตร ${ticket.ticket_id} และส่ง QR ทาง LINE แล้ว`, result.warning ? "warning" : "success");
 }
 
 async function checkIn(rawCode) {

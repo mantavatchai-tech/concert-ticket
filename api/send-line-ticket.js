@@ -35,6 +35,27 @@ function buildMessages(baseUrl, ticket) {
   ];
 }
 
+async function pushLineMessage(lineToken, to, messages) {
+  return fetch("https://api.line.me/v2/bot/message/push", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${lineToken}`,
+    },
+    body: JSON.stringify({ to, messages }),
+  });
+}
+
+async function readLineError(lineResponse) {
+  const details = await lineResponse.text();
+  try {
+    const parsed = JSON.parse(details);
+    return parsed.message || details;
+  } catch {
+    return details;
+  }
+}
+
 function formatEventDate(value) {
   const legacyMap = {
     "Day 1": "2026-08-27",
@@ -78,21 +99,27 @@ module.exports = async function handler(request, response) {
     return;
   }
 
-  const lineResponse = await fetch("https://api.line.me/v2/bot/message/push", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${lineToken}`,
-    },
-    body: JSON.stringify({
-      to,
-      messages: buildMessages(getBaseUrl(request), ticket),
-    }),
-  });
+  const messages = buildMessages(getBaseUrl(request), ticket);
+  const lineResponse = await pushLineMessage(lineToken, to, messages);
 
   if (!lineResponse.ok) {
-    const details = await lineResponse.text();
-    response.status(lineResponse.status).json({ error: "LINE push message failed", details });
+    const details = await readLineError(lineResponse);
+    const fallbackResponse = await pushLineMessage(lineToken, to, [messages[0]]);
+    if (fallbackResponse.ok) {
+      response.status(200).json({
+        ok: true,
+        warning: "ส่งรูป QR ไม่สำเร็จ แต่ส่งข้อความและลิงก์บัตรให้ลูกค้าแล้ว",
+        details,
+      });
+      return;
+    }
+
+    const fallbackDetails = await readLineError(fallbackResponse);
+    response.status(lineResponse.status).json({
+      error: "LINE push message failed",
+      details,
+      fallbackDetails,
+    });
     return;
   }
 
