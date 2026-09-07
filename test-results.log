@@ -1,0 +1,40 @@
+
+> concert-ticket-checkin@1.0.0 test
+> node --test tests/*.test.cjs
+
+✔ send requires session even when legacy PIN is supplied (2.0004ms)
+✔ LINE uses database recipient and link, stable retry key, ignores forged payload (19.9013ms)
+✔ LINE duplicate 409 needs accepted request header; failure is persisted (1.8233ms)
+✔ sent delivery does not send again (1.1154ms)
+✔ uncertain network outcome is retryable and never reported as sent (1.6757ms)
+✔ webhook retains raw body configuration and rejects forged signature (1.4798ms)
+✔ signed webhook verification succeeds, database errors return retryable failure (2.3304ms)
+✔ QR endpoint rejects oversized/legacy input and produces a PNG for opaque token (78.3693ms)
+✔ rejects null and empty passwords without creating sessions (2064.499ms)
+✔ failed login counter persists and locks account after five failures (30.9473ms)
+✔ anonymous and authenticated roles cannot read protected tables or helpers (22.1717ms)
+✔ role enforcement and invalid session apply to reads and writes (9.4371ms)
+✔ same issue request returns original batch, altered payload is rejected (11.8192ms)
+✔ over-capacity batch rolls back all tickets and request record (7.0142ms)
+✔ customer ticket needs opaque token and returns no LINE or staff data (6.0022ms)
+✔ check-in can succeed only once and used ticket cannot be canceled (11.8091ms)
+✔ canceled ticket cannot check in or expose QR (10.6597ms)
+✔ payment verification, immutable paid price and refund accounting (18.5322ms)
+✔ dashboard totals exceed history page, issuer export includes all pages (179.4863ms)
+✔ delivery retry key persists and sent state cannot be downgraded (9.9795ms)
+✔ password change revokes sessions and user management enforces role (273.2327ms)
+✔ legacy SQL cannot reopen permissions after upgrade (4.787ms)
+✔ local server exposes only application assets and approved API routes (74.218ms)
+✔ upgrade preserves used tickets, rotates unused QR, and disables only default-password accounts (2044.9686ms)
+✔ UI loads dynamic event prices and exact totals, with working pagination (217.1567ms)
+✔ check-in role hides management and ticket/customer QR lists (56.8108ms)
+✔ lost issue response preserves request id and recovery reuses it (62.6586ms)
+✔ double submit sends one batch; CSV neutralizes spreadsheet formulas (49.3255ms)
+ℹ tests 28
+ℹ suites 0
+ℹ pass 28
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9546.2869

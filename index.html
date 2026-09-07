@@ -2,15 +2,18 @@
 <html lang="th">
   <head>
     <meta charset="utf-8" />
+    <meta name="referrer" content="no-referrer" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ระบบบัตรคอนเสิร์ต</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
     <script src="config.js" defer></script>
+    <script src="vendor/fflate.min.js" defer></script>
     <script src="app.js" defer></script>
   </head>
   <body>
+    <div id="appToast" class="app-toast" role="alert" aria-live="assertive" hidden></div>
     <section id="loginView" class="login-view">
       <form id="loginForm" class="login-panel">
         <p class="eyebrow">Admin Login</p>
@@ -29,12 +32,7 @@
         <p class="eyebrow">Concert Ticket Check-in</p>
         <h1>ระบบจำหน่ายและเช็คอินบัตรคอนเสิร์ต</h1>
       </div>
-      <div class="event-day-switch" aria-label="เลือกวันงานปัจจุบัน">
-        <button class="day-chip is-active" data-current-day="2026-08-27">27 Aug 2026</button>
-        <button class="day-chip" data-current-day="2026-08-28">28 Aug 2026</button>
-        <button class="day-chip" data-current-day="2026-08-30">30 Aug 2026</button>
-        <button class="day-chip" data-current-day="2026-09-06">6 Sep 2026</button>
-      </div>
+      <div class="event-day-switch" aria-label="เลือกวันงาน"></div>
       <div class="user-bar">
         <span id="currentUserBadge" class="status-badge">-</span>
         <button id="logoutButton" class="ghost-button" type="button">ออกจากระบบ</button>
@@ -48,31 +46,32 @@
 
       <section class="dashboard-grid" aria-label="Dashboard">
         <article class="metric">
-          <span>ผู้เข้างานวันนี้</span>
+          <span>ผู้เข้างานของวันที่เลือก</span>
           <strong id="todayCheckins">0</strong>
         </article>
         <article class="metric">
-          <span>เช็คอินทั้งหมด</span>
+          <span>เช็กอินของวันที่เลือก</span>
           <strong id="totalCheckins">0</strong>
         </article>
         <article class="metric">
-          <span>QR ใช้งานได้</span>
+          <span>QR ของวันที่เลือก</span>
           <strong id="totalIssued">0</strong>
         </article>
         <article class="metric">
-          <span>Regular ขายแล้ว</span>
+          <span>Regular ของวันที่เลือก</span>
           <strong id="regularSold">0</strong>
           <div id="regularDailyBreakdown" class="metric-breakdown"></div>
         </article>
         <article class="metric">
-          <span>บัตรที่ยกเลิก</span>
+          <span>บัตรยกเลิกของวันที่เลือก</span>
           <strong id="totalCanceled">0</strong>
         </article>
         <article class="metric">
-          <span>VIP คงเหลือ</span>
-          <strong id="vipRemaining">48</strong>
+          <span>VIP คงเหลือของวันที่เลือก</span>
+          <strong id="vipRemaining">0</strong>
           <div id="vipDailyBreakdown" class="metric-breakdown"></div>
         </article>
+        <article class="metric" id="paymentMetric"><span>รับเงินจริงของวันที่เลือก (บาท)</span><strong id="receivedAmount">0</strong></article>
       </section>
 
       <section class="workbench">
@@ -108,7 +107,7 @@
           <form id="manualCheckinForm" class="manual-form">
             <label for="manualCode">กรอกรหัส QR</label>
             <div class="inline-input">
-              <input id="manualCode" name="manualCode" placeholder="เช่น VIP001-03 หรือ REG0007" autocomplete="off" />
+              <input id="manualCode" name="manualCode" placeholder="รหัส QR จากบัตรลูกค้า" autocomplete="off" />
               <button class="primary-button" type="submit">เช็คอิน</button>
             </div>
           </form>
@@ -144,12 +143,7 @@
             <input id="ticketQuantity" name="ticketQuantity" type="number" min="1" max="50" value="1" />
 
             <label for="eventDay">วันของบัตร</label>
-            <select id="eventDay" name="eventDay">
-              <option value="2026-08-27">27 Aug 2026</option>
-              <option value="2026-08-28">28 Aug 2026</option>
-              <option value="2026-08-30">30 Aug 2026</option>
-              <option value="2026-09-06">6 Sep 2026</option>
-            </select>
+            <select id="eventDay" name="eventDay" required></select>
 
             <label for="buyerName">ชื่อลูกค้า</label>
             <input id="buyerName" name="buyerName" placeholder="ชื่อลูกค้าหรือโต๊ะ" />
@@ -158,8 +152,7 @@
             <input id="lineUserId" name="lineUserId" list="lineCustomerList" placeholder="เช่น Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
             <datalist id="lineCustomerList"></datalist>
 
-            <label for="adminPin">รหัสแอดมินสำหรับส่ง LINE</label>
-            <input id="adminPin" name="adminPin" type="password" placeholder="ตั้งค่า ADMIN_PIN ตอน deploy" />
+
 
             <label class="checkbox-row">
               <input id="sendLine" name="sendLine" type="checkbox" checked />
@@ -167,18 +160,16 @@
             </label>
 
             <button class="primary-button" type="submit">สร้างบัตร</button>
+            <button id="recoverIssue" class="ghost-button" type="button">กู้คืนรายการค้าง</button>
             <div id="issueResult" class="scan-result neutral">รอออกบัตร</div>
           </form>
 
-          <div class="ticket-rules">
-            <div><strong>VIP</strong><span>จำกัด 48 ใบต่อวัน, 1 ใบแตกเป็น 4 QR, พร้อมเครื่องดื่ม</span></div>
-            <div><strong>Regular</strong><span>เลือกจำนวนได้, 1 คน, 1 QR, ราคา 150 หรือ 180 บาท</span></div>
-          </div>
+          <p>ราคาและจำนวนบัตรอ้างอิงจากงานที่เลือก · VIP 4 คน / Regular 1 คนต่อบัตร</p>
         </div>
       </section>
 
       <section class="tables">
-        <div class="panel">
+        <div class="panel" id="ticketsPanel">
           <div class="panel-heading">
             <div>
               <p class="eyebrow">Issued Tickets</p>
@@ -190,6 +181,7 @@
             </div>
           </div>
           <div id="ticketList" class="ticket-list"></div>
+          <div class="control-row"><button id="ticketPrev" type="button">ก่อนหน้า</button><span id="ticketPageLabel"></span><button id="ticketNext" type="button">ถัดไป</button></div>
         </div>
 
         <div class="panel">
@@ -212,6 +204,7 @@
               <tbody id="checkinLog"></tbody>
             </table>
           </div>
+          <div class="control-row"><button id="checkinPrev" type="button">ก่อนหน้า</button><span id="checkinPageLabel"></span><button id="checkinNext" type="button">ถัดไป</button></div>
         </div>
       </section>
 
@@ -239,6 +232,54 @@
           </div>
         </div>
       </section>
+      <section class="settings-grid">
+        <form id="passwordForm" class="panel">
+          <h2>เปลี่ยนรหัสผ่าน</h2>
+          <label>รหัสผ่านเดิม <input name="oldPassword" type="password" autocomplete="current-password" required></label>
+          <label>รหัสผ่านใหม่ (12–72 ไบต์) <input name="newPassword" type="password" autocomplete="new-password" minlength="12" maxlength="72" required></label>
+          <button type="submit" class="primary-button">เปลี่ยนรหัสผ่านและออกจากทุกอุปกรณ์</button><p role="status"></p>
+        </form>
+      </section>
+      <section id="adminSettings" class="settings-grid" hidden>
+        <form id="eventForm" class="panel">
+          <h2>เพิ่ม / แก้ไขงาน</h2>
+          <pre id="eventList"></pre>
+          <label>วันงาน (เลือกวันเดิมเพื่อแก้ไข) <input name="day" type="date" required></label>
+          <label>ชื่องาน <input name="eventName" maxlength="200" required></label>
+          <label><input name="active" type="checkbox" checked> เปิดจำหน่าย (เอาเครื่องหมายออกเมื่อต้องการปิดขาย)</label>
+          <label>สี QR ประจำวันงาน <select name="ticketColor" id="ticketColor" required><option value="#0f766e">เขียวอมฟ้า</option><option value="#1d4ed8">น้ำเงิน</option><option value="#7c3aed">ม่วง</option><option value="#b91c1c">แดง</option><option value="#c2410c">ส้ม</option><option value="#15803d">เขียว</option><option value="#111827">ดำ</option></select></label><div id="ticketColorPreview" class="ticket-color-preview" style="--preview-color:#0f766e">ตัวอย่างสี QR</div>
+          <label>จำนวน VIP สูงสุด <input name="vipLimit" type="number" min="0" value="48" required></label>
+          <label>จำนวน Regular สูงสุด <input name="regularLimit" type="number" min="0" value="10000" required></label>
+          <label>ราคา VIP <input name="vipPrice" type="number" min="0" value="2000" required></label>
+          <label>ราคา Regular คั่นด้วยจุลภาค <input name="regularPrices" value="150,180" pattern="[0-9]+(\s*,\s*[0-9]+)*" required></label>
+          <button type="submit" class="primary-button">บันทึกงาน</button>
+          <div class="control-row"><button type="button" id="backupEvent" class="ghost-button">ดาวน์โหลดแบ็กอัพ Excel</button><button type="button" id="deleteEvent" class="danger-button" disabled>ลบงานและข้อมูลของวันนี้</button></div>
+          <p class="muted">ต้องดาวน์โหลดข้อมูลสำรองก่อนลบ ลบได้เฉพาะงานที่ปิดขายหรือวันที่ผ่านมาแล้ว</p><p role="status"></p>
+        </form>
+        <form id="userForm" class="panel">
+          <h2>จัดการบัญชีเจ้าหน้าที่</h2><pre id="userList"></pre>
+          <label>Username (ใช้ชื่อเดิมเพื่อแก้ไข) <input name="username" pattern="[a-zA-Z0-9_.-]{3,50}" required autocomplete="off"></label>
+          <label>ชื่อแสดง <input name="displayName" required></label>
+          <label>สิทธิ์ <select name="role"><option value="checkin">เช็คอิน</option><option value="issuer">ออกบัตร</option><option value="admin">แอดมิน</option></select></label>
+          <label><input name="active" type="checkbox" checked> เปิดใช้งานบัญชี</label>
+          <label>รหัสผ่านใหม่ (เว้นว่างเพื่อคงเดิม) <input name="password" type="password" minlength="12" maxlength="72" autocomplete="new-password"></label>
+          <button type="submit" class="primary-button">บันทึกบัญชี</button>
+          <button type="button" id="revokeSessions" class="ghost-button">ยกเลิก session ทั้งหมดของบัญชีนี้</button><p role="status"></p>
+        </form>
+      </section>
+      <dialog id="paymentDialog">
+        <form id="paymentForm">
+          <h2>บันทึกการชำระเงิน</h2>
+          <label>เลขบัตร <input name="ticketId" readonly></label>
+          <label>สถานะ <select name="status"><option value="pending">รอชำระ</option><option value="paid">ชำระแล้ว</option><option value="refunded">คืนเงินแล้ว</option></select></label>
+          <label>เลขอ้างอิง / ใบเสร็จ <input name="reference" maxlength="200"></label>
+          <label>ยอดรับสุทธิของบัตร (คืนเงินเป็น 0) <input name="amount" type="number" min="0" required></label>
+          <p>เป็นการบันทึกผลที่เจ้าหน้าที่ตรวจสอบแล้ว การเปลี่ยนสถานะนี้ไม่ทำรายการโอนหรือคืนเงินจริง</p>
+          <button type="submit" class="primary-button">บันทึก</button><button type="button" id="closePayment">ปิด</button><p role="status"></p>
+        </form>
+      </dialog>
+
     </main>
   </body>
 </html>
+

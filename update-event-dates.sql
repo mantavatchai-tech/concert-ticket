@@ -1,3 +1,9 @@
+-- Legacy setup: never run after security-upgrade.sql.
+do $$ begin
+  if to_regclass('public.issue_requests') is not null then
+    raise exception 'Security upgrade already installed. Do not rerun legacy SQL.';
+  end if;
+end $$;
  alter table public.tickets drop constraint if exists tickets_event_day_check;
 
 update public.tickets

@@ -1,3 +1,9 @@
+-- Legacy setup: never run after security-upgrade.sql.
+do $$ begin
+  if to_regclass('public.issue_requests') is not null then
+    raise exception 'Security upgrade already installed. Do not rerun legacy SQL.';
+  end if;
+end $$;
 create extension if not exists pgcrypto with schema extensions;
 
 create table if not exists public.admin_users (
@@ -125,7 +131,7 @@ begin
   where lower(username) = lower(trim(p_username))
     and active = true;
 
-  if not found or v_user.password_hash <> extensions.crypt(p_password, v_user.password_hash) then
+  if not found or p_password is null or v_user.password_hash is distinct from extensions.crypt(p_password, v_user.password_hash) then
     raise exception 'Username หรือ Password ไม่ถูกต้อง';
   end if;
 
@@ -459,11 +465,4 @@ grant execute on function public.cancel_ticket(text, text, text) to anon;
 
 drop function if exists public.update_ticket_line_status(text, text, text, text);
 
--- ผู้ใช้เริ่มต้น 3 สิทธิ์
--- เปลี่ยน password หลังรันจริงเพื่อความปลอดภัย
-insert into public.admin_users (username, password_hash, display_name, role)
-values
-  ('admin', extensions.crypt('Admin@1234', extensions.gen_salt('bf')), 'Admin', 'admin'),
-  ('issuer', extensions.crypt('Issuer@1234', extensions.gen_salt('bf')), 'Ticket Issuer', 'issuer'),
-  ('checkin', extensions.crypt('Checkin@1234', extensions.gen_salt('bf')), 'Check-in Staff', 'checkin')
-on conflict (username) do nothing;
+-- Create the first administrator using bootstrap-admin.example.sql. No seeded passwords.

@@ -1,3 +1,9 @@
+-- Legacy setup: never run after security-upgrade.sql.
+do $$ begin
+  if to_regclass('public.issue_requests') is not null then
+    raise exception 'Security upgrade already installed. Do not rerun legacy SQL.';
+  end if;
+end $$;
 create table if not exists public.ticket_counters (
   ticket_type text primary key check (ticket_type in ('VIP', 'Regular')),
   next_number integer not null default 1

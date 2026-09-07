@@ -1,115 +1,57 @@
-# ระบบบัตรคอนเสิร์ตออนไลน์
+# ระบบบัตรคอนเสิร์ต
 
-เว็บแอปสำหรับออกบัตร, ส่ง QR ผ่าน LINE OA, เช็คอินผ่านมือถือ, กันสแกนซ้ำ และดู Dashboard แบบข้อมูลกลาง
+ระบบออกบัตร VIP/Regular ส่งลิงก์ QR ทาง LINE OA เช็คอิน จัดการงาน/เจ้าหน้าที่ และรายงานรับเงิน
 
-## 1. ตั้งค่า Supabase
+## เริ่มต้นในเครื่อง
 
-1. สร้างโปรเจกต์ที่ Supabase
-2. ไปที่ SQL Editor
-3. คัดลอกคำสั่งใน `supabase-schema.sql` ไปรัน
-4. ไปที่ Project Settings > API
-5. คัดลอก `Project URL` และ `anon public key`
-6. สร้างไฟล์ `config.js` จาก `config.example.js` แล้วใส่ค่าจริง
+ใช้ Node.js 22 ขึ้นไป
 
-```js
-window.APP_CONFIG = {
-  supabaseUrl: "https://YOUR_PROJECT_REF.supabase.co",
-  supabaseAnonKey: "YOUR_SUPABASE_ANON_KEY",
-};
+```sh
+npm ci
+npm test
+npm run test:concurrency
+npm start
 ```
 
-## 2. ตั้งค่า LINE OA
+เปิด `http://127.0.0.1:3000` ตั้งค่า public Supabase URL/key ใน `config.js` และค่าฝั่ง server ใน `.env` ตาม `.env.example` ห้ามใส่ service role key ในไฟล์ browser
 
-ต้องใช้ LINE Messaging API channel access token
+## อัปเดตฐานข้อมูลเดิม
 
-บน Vercel ให้ตั้ง Environment Variables:
+อ่าน [UPGRADE.md](UPGRADE.md) ก่อนใช้จริง โดยเฉพาะผลต่อ QR เก่าและบัญชีเริ่มต้น
 
+1. สำรองฐานข้อมูลและทดสอบกู้คืนในฐานข้อมูลแยก
+2. หากฐานข้อมูลเดิมยังไม่มีระบบบัญชี ให้รัน `admin-features.sql` ก่อน
+3. รัน `security-upgrade.sql` ใน Supabase SQL Editor
+4. บัญชีที่ยังใช้รหัสผ่านเริ่มต้นจะถูกปิดใช้งาน ใช้ `bootstrap-admin.example.sql` โดยกำหนดรหัสผ่านของคุณเองเพื่อเปิดบัญชี admin
+5. Deploy โค้ดชุดนี้พร้อม SQL แล้วส่งลิงก์บัตรใหม่ให้ผู้ถือบัตรที่ยังไม่ใช้
+
+ฐานข้อมูลใหม่ให้รัน `supabase-schema.sql` → `admin-features.sql` → `security-upgrade.sql` → bootstrap admin ตามลำดับ ห้ามรัน SQL รุ่นเก่าหลัง security upgrade
+
+## ตั้งค่า Vercel
+
+Root Directory ต้องเป็นโฟลเดอร์ที่มี `package.json` ใช้ Git integration ของ Vercel และการตั้งค่าจาก `vercel.json` คำสั่ง `npm run build` จะคัดลอกเฉพาะไฟล์หน้าเว็บไป `public/` ส่วน API อยู่ใน `api/`
+
+Environment Variables:
+
+- `APP_URL` — HTTPS origin ของเว็บจริง
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY` — เฉพาะ server
 - `LINE_CHANNEL_ACCESS_TOKEN`
 - `LINE_CHANNEL_SECRET`
-- `ADMIN_PIN`
-- `APP_URL` เช่น `https://your-site.vercel.app`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
 
-ลูกค้าต้องเป็นเพื่อนกับ LINE OA หรือเคยคุยกับ OA ตามเงื่อนไขของ LINE ก่อน จึงจะรับ push message ได้
+ไม่ใช้ `ADMIN_PIN` อีกต่อไป ส่ง LINE ด้วย session และสิทธิ์ของผู้ล็อกอิน โดย server อ่านผู้รับ/ข้อมูลบัตรจากฐานข้อมูลเอง Webhook URL คือ `/api/line-webhook` ให้เปิดการส่ง webhook ซ้ำใน LINE Developers ด้วย
 
-ตั้ง Webhook URL ใน LINE Developers Console เป็น:
+## พฤติกรรมสำคัญ
 
-```text
-https://your-site.vercel.app/api/line-webhook
-```
+- ไม่มีบัญชีรหัสผ่านเริ่มต้นที่ใช้งานได้ และปฏิเสธรหัสผ่าน `null`
+- ลองรหัสผ่านผิด 5 ครั้งจะพักบัญชี 15 นาที session อายุ 8 ชั่วโมง อยู่ในแท็บปัจจุบัน เปลี่ยนรหัสผ่านหรือปิดบัญชีจะยกเลิก session
+- ไม่มีการเปิดอ่านตารางให้ผู้ใช้ทั่วไป อ่านผ่าน RPC ที่ตรวจสิทธิ์เท่านั้น ฝ่ายเช็คอินไม่ได้รับรายการ QR ทั้งหมดหรือข้อมูลลูกค้า LINE
+- เลขบัตรเป็นเลขอ้างอิง รหัส QR และ token เปิดบัตรเป็นค่าสุ่มคนละค่า ห้ามแชร์ลิงก์บัตรสาธารณะ
+- ออกบัตรหลายใบเป็น transaction เดียว ป้องกันการกดซ้ำด้วย request ID ถ้าเน็ตหลุดใช้ “กู้คืนรายการค้าง” จากเครื่องเดิมก่อนสร้างรายการใหม่
+- Dashboard นับจากฐานข้อมูล รายการบัตร/เช็คอินแบ่งหน้าละ 50 รายการ Export อ่านครบทุกหน้า
+- งาน ราคา และโควตาแก้จากหน้าแอดมิน งานที่ผ่านวันงานแล้วหรือปิดขายออกบัตรใหม่ไม่ได้
+- บัตรใหม่มีสถานะรอชำระ ข้อมูลเก่าระบุว่ายังไม่ตรวจสอบ เจ้าหน้าที่บันทึกเลขอ้างอิงและยอดรับจริงแยกจากมูลค่าบัตร การบันทึกคืนเงินไม่ใช่การโอนเงินจริง
+- ส่ง LINE เป็นลิงก์เปิด QR เพื่อไม่ส่งรหัสบัตรไว้ใน URL รูป ใช้ retry key เดิมเมื่อส่งซ้ำ หาก LINE รับคำขอแล้วจะไม่ส่งซ้ำอีก สถานะ sent หมายถึง LINE รับคำขอ ไม่ใช่ลูกค้าอ่านแล้ว
+- ข้อมูลหน้าแอดมินรีเฟรชทุก 15 วินาทีระหว่างเปิดแท็บ การเช็คอินตรวจฐานข้อมูลสดทุกครั้ง
 
-เมื่อคนแอดหรือทัก LINE OA ระบบจะบันทึก `line_user_id` ไว้ในตาราง `line_customers` และช่อง LINE userId ในหน้าออกบัตรจะมีรายการให้เลือก
-
-## 2.1 ระบบ Login หน้าแอดมิน
-
-หลังอัปเดตเวอร์ชันที่มีระบบ Login ให้รัน `admin-features.sql` ใน Supabase SQL Editor ระบบจะสร้างผู้ใช้เริ่มต้นในตาราง `admin_users` ให้ 3 บัญชี
-
-Role ที่ใช้ได้:
-
-- `admin` ใช้งานได้ทุกอย่าง
-- `issuer` ออกบัตร, แก้ราคา, ยกเลิกบัตร, Export รายงาน
-- `checkin` เช็คอินได้อย่างเดียว
-
-ผู้ใช้เริ่มต้น:
-
-| Username | Password | สิทธิ์ |
-| --- | --- | --- |
-| `admin` | `Admin@1234` | ทำได้ทุกอย่าง |
-| `issuer` | `Issuer@1234` | ออกบัตร/แก้ราคา/ยกเลิก/Export |
-| `checkin` | `Checkin@1234` | เช็คอินอย่างเดียว |
-
-ควรเปลี่ยน password ก่อนใช้งานจริง
-
-## 3. Deploy ไป Vercel
-
-1. อัปโหลด repo นี้ขึ้น GitHub
-2. Import เข้า Vercel
-3. ตั้ง Environment Variables ตามข้อ 2
-4. Deploy
-
-หลัง deploy แล้ว เปิด URL ด้วยมือถือ เจ้าหน้าที่สามารถสแกน QR ได้ผ่าน HTTPS
-
-## 4. การใช้งาน
-
-1. เลือกวันงานปัจจุบันด้านบน
-2. กรอกชื่อเจ้าหน้าที่
-3. ออกบัตรโดยเลือก VIP หรือ Regular, ราคา Regular 150/180 บาท และวันของบัตร
-4. กรอก LINE userId ของลูกค้า แล้วติ๊กส่ง LINE
-5. ลูกค้าจะได้รับข้อความและรูป QR ผ่าน LINE OA
-6. หน้างานสแกน QR หรือกรอกรหัส QR
-
-VIP แสดงสิทธิ์เป็น `พร้อมเครื่องดื่ม`
-
-## 5. การอัปเดตระบบ
-
-ถ้าแก้เฉพาะหน้าเว็บ เช่น ปุ่ม ข้อความหน้าเว็บ หรือหน้าตา:
-
-- อัปไฟล์ที่แก้ขึ้น GitHub
-- รอ Vercel deploy ใหม่
-
-ถ้าแก้สิ่งที่ Supabase เป็นคนสร้าง เช่น ราคา, สิทธิ์ VIP, ฟังก์ชันออกบัตร, ฟังก์ชันเช็คอิน:
-
-- อัปไฟล์ที่แก้ขึ้น GitHub
-- รอ Vercel deploy ใหม่
-- รันไฟล์ SQL ที่เกี่ยวข้องใน Supabase ด้วย เช่น `admin-features.sql`
-
-ถ้าออก VIP ใหม่แล้วยังเห็นข้อความเก่า `เบียร์ 6 กระป๋อง, น้ำแข็ง 1 ชุด` ให้รัน `admin-features.sql` เวอร์ชันล่าสุดใน Supabase อีกครั้ง แล้วรัน SQL นี้เพื่อแก้บัตรเก่า:
-
-```sql
-update public.tickets
-set perks = 'พร้อมเครื่องดื่ม'
-where ticket_type = 'VIP'
-  and perks in ('เบียร์ 6 กระป๋อง, น้ำแข็ง 1 ชุด', 'เครื่องดื่ม');
-```
-
-ระบบจะปฏิเสธอัตโนมัติถ้า:
-
-- ไม่พบบัตร
-- บัตรเป็นคนละวัน
-- ยังไม่ถึงวันจริงของบัตรตามเวลาไทย
-- QR ถูกเช็คอินไปแล้ว
-
-## หมายเหตุสำคัญ
-
-เวอร์ชันนี้เปิดให้ทุกคนที่มี URL และ Supabase anon key อ่าน Dashboard และเรียกออกบัตรได้ผ่านหน้าเว็บ จึงควรวาง URL หลังระบบ login หรือเพิ่ม Supabase Auth ก่อนใช้กับทีมขนาดใหญ่
+รายละเอียดการใช้งานและกู้คืนอยู่ใน [MANUAL.md](MANUAL.md) และ [UPGRADE.md](UPGRADE.md)

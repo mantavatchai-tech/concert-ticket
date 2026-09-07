@@ -1,0 +1,22 @@
+✔ rejects null and empty passwords without creating sessions (1723.2467ms)
+✔ failed login counter persists and locks account after five failures (27.8514ms)
+✔ anonymous and authenticated roles cannot read protected tables or helpers (21.2227ms)
+✔ role enforcement and invalid session apply to reads and writes (7.4282ms)
+✔ same issue request returns original batch, altered payload is rejected (20.2503ms)
+✔ over-capacity batch rolls back all tickets and request record (6.7893ms)
+✔ customer ticket needs opaque token and returns no LINE or staff data (5.7009ms)
+✔ check-in can succeed only once and used ticket cannot be canceled (8.9395ms)
+✔ canceled ticket cannot check in or expose QR (12.232ms)
+✔ payment verification, immutable paid price and refund accounting (16.9119ms)
+✔ dashboard totals exceed history page, issuer export includes all pages (178.6495ms)
+✔ delivery retry key persists and sent state cannot be downgraded (10.3649ms)
+✔ password change revokes sessions and user management enforces role (271.4268ms)
+✔ legacy SQL cannot reopen permissions after upgrade (5.3668ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2455.0398

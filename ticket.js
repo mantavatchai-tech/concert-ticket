@@ -6,17 +6,14 @@ const db = APP_CONFIG.supabaseUrl && APP_CONFIG.supabaseAnonKey
 
 document.addEventListener("DOMContentLoaded", async () => {
   document.querySelector("#printCustomerTicket").addEventListener("click", () => window.print());
-  const ticketId = new URLSearchParams(window.location.search).get("id");
+  const params = new URLSearchParams(window.location.hash.slice(1));
+  const ticketId = params.get("token");
   if (!ticketId || !db) {
     showTicketError("ไม่พบบัตร");
     return;
   }
 
-  const { data, error } = await db
-    .from("tickets")
-    .select("id,ticket_type,event_day,buyer_name,price,capacity,perks,canceled_at,cancel_reason,ticket_codes(code,seat_no,checked_in_at)")
-    .eq("id", ticketId)
-    .single();
+  const { data, error } = await db.rpc('get_customer_ticket',{p_token:ticketId});
 
   if (error || !data) {
     showTicketError("ไม่พบบัตรหรือโหลดข้อมูลไม่สำเร็จ");
@@ -24,16 +21,19 @@ document.addEventListener("DOMContentLoaded", async () => {
   }
 
   renderTicket(data);
+  if(params.get("print") === "1") window.print();
 });
 
 function renderTicket(ticket) {
   const codes = [...ticket.ticket_codes].sort((a, b) => a.seat_no - b.seat_no);
+  const ticketColor=safeTicketColor(ticket.ticket_color);
+  document.querySelector("#customerTicket").style.setProperty("--event-color",ticketColor);
   document.querySelector("#ticketTitle").textContent = `${ticket.id} · ${ticket.ticket_type}`;
   document.querySelector("#ticketDetails").innerHTML = `
     <p>วันงาน: <strong>${formatEventDate(ticket.event_day)}</strong></p>
     <p>ลูกค้า: ${escapeHtml(ticket.buyer_name || "-")}</p>
     <p>จำนวน: ${ticket.capacity} คน · ราคา ${Number(ticket.price).toLocaleString("th-TH")} บาท</p>
-    ${ticket.perks ? `<p>สิทธิ์ VIP: ${ticket.perks}</p>` : ""}
+    ${ticket.perks ? `<p>สิทธิ์ VIP: ${escapeHtml(ticket.perks)}</p>` : ""}
   `;
 
   const list = document.querySelector("#customerQrList");
@@ -52,7 +52,7 @@ function renderTicket(ticket) {
     const item = document.createElement("article");
     item.className = "customer-qr-card";
     item.innerHTML = `
-      <div class="qr-box qr-box-large" data-qr="${qr.code}"></div>
+      <div class="qr-box qr-box-large" data-qr="${qr.code}" data-qr-color="${ticketColor}"></div>
       <strong>${qr.code}</strong>
       <span>${qr.checked_in_at ? "เช็คอินแล้ว" : "ยังไม่เช็คอิน"}</span>
     `;
@@ -64,8 +64,9 @@ function renderTicket(ticket) {
 function renderQrCodes() {
   document.querySelectorAll("[data-qr]").forEach((box) => {
     const code = box.dataset.qr;
+    const color=safeTicketColor(box.dataset.qrColor);
     box.innerHTML = "";
-    new QRCode(box, { text: code, width: 180, height: 180, correctLevel: QRCode.CorrectLevel.M });
+    new QRCode(box, { text: code, width: 180, height: 180, colorDark: color, colorLight: "#ffffff", correctLevel: QRCode.CorrectLevel.M });
   });
 }
 
@@ -105,3 +106,5 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
 }
+
+function safeTicketColor(value) { return /^#[0-9a-fA-F]{6}$/.test(value || '') ? value.toLowerCase() : '#0f766e'; }

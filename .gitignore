@@ -1,0 +1,12 @@
+node_modules/
+.env*
+!.env.example
+.vercel/
+backups/
+test-results/
+
+public/
+.test-postgres-*/
+*.log
+test-audit.json
+.local-demo/
