@@ -670,12 +670,12 @@ button:disabled { opacity:.5; cursor:wait; }
 .ticket-card { border-top: 6px solid var(--event-color, var(--accent)); }
 .customer-ticket { border-top: 10px solid var(--event-color, var(--accent)); }
 
-.app-toast { position:fixed; z-index:10000; top:22px; left:50%; transform:translateX(-50%); width:min(92vw,560px); padding:16px 20px; border:2px solid currentColor; border-radius:14px; box-shadow:0 14px 38px rgba(16,24,40,.25); font-size:1.05rem; font-weight:800; line-height:1.5; animation:toast-in .2s ease-out; }
+.app-toast { position:fixed; z-index:10000; top:22px; left:50%; transform:translateX(-50%); width:max-content; max-width:calc(100vw - 32px); padding:10px 14px; border:2px solid currentColor; border-radius:14px; box-shadow:0 14px 38px rgba(16,24,40,.25); font-size:.92rem; font-weight:800; line-height:1.5; animation:toast-in .2s ease-out; }
 .app-toast.success { background:#ecfdf3; color:#05603a; }
 .app-toast.error { background:#fff1f1; color:#b42318; }
 .app-toast.warning { background:#fff8e6; color:#8a4b08; }
 .app-toast.neutral { background:#eef4f8; color:#344054; }
-.app-toast::before { content:'ℹ'; display:inline-grid; place-items:center; width:28px; height:28px; margin-right:10px; border:2px solid currentColor; border-radius:50%; }
+.app-toast::before { content:'ℹ'; display:inline-grid; place-items:center; width:22px; height:22px; margin-right:8px; border:2px solid currentColor; border-radius:50%; }
 .app-toast.success::before { content:'✓'; }
 .app-toast.error::before,.app-toast.warning::before { content:'!'; }
 [role=status]:not(:empty) { min-height:54px; padding:12px 14px; border:2px solid #98a2b3; border-radius:10px; background:#f8fafc; color:#344054; font-weight:800; }
@@ -686,3 +686,16 @@ button:disabled { opacity:.5; cursor:wait; }
 @media (prefers-reduced-motion:reduce) { .app-toast { animation:none; } }
 
 .ticket-color-preview { padding:12px 14px; border-radius:10px; background:var(--preview-color); color:#fff; font-weight:800; text-align:center; }
+
+.app-toast.success::before { content:'✓'; background:#12b76a; border-color:#12b76a; color:#fff; }
+.app-toast.error::before { content:'×'; background:#d92d20; border-color:#d92d20; color:#fff; }
+.app-toast.warning::before { content:'!'; background:#f79009; border-color:#f79009; color:#fff; }
+.app-toast.neutral::before { content:'i'; background:#667085; border-color:#667085; color:#fff; }
+
+
+/* Compact metric cards sized to their labels. */
+.dashboard-grid { display:flex; flex-wrap:wrap; align-items:stretch; justify-content:flex-start; gap:8px; }
+.dashboard-grid .metric { flex:0 0 auto; width:max-content; min-width:132px; max-width:100%; padding:8px 10px; }
+.dashboard-grid .metric span { white-space:nowrap; }
+.dashboard-grid #paymentMetric { min-width:190px; }
+@media (max-width:520px) { .dashboard-grid .metric { flex:1 1 145px; width:auto; min-width:0; } .dashboard-grid .metric span { white-space:normal; } }

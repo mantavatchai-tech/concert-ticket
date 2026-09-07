@@ -273,7 +273,7 @@ async function loadData() {
     tickets=data.tickets; checkins=data.checkins; auditLogs=data.audit_logs;
     lineCustomers=data.line_customers; users=data.users; metrics=data.metrics; ticketCount=data.ticket_count;
     renderEventOptions(); applyRoleUi(); render(); renderSettings(); updatePaging();
-    showResult('ข้อมูลอัปเดตแล้ว','neutral');
+    showResult('ข้อมูลอัปเดตแล้ว','success');
   } catch(error) {
     if(error.code==='28000') await logout();
     showResult(error.message || 'โหลดข้อมูลไม่สำเร็จ กรุณาลองใหม่','error');
@@ -924,7 +924,7 @@ function showToast(message,type='neutral') {
   const toast=document.querySelector('#appToast');
   if(!toast || !message) return;
   clearTimeout(toastTimer);toast.textContent=message;toast.className='app-toast '+type;toast.hidden=false;
-  toastTimer=setTimeout(()=>{toast.hidden=true;},5000);
+  toastTimer=setTimeout(()=>{toast.hidden=true;},10000);
 }
 function setStatus(element,message,type='neutral') {
   if(!element) return; element.textContent=message;element.className=type;showToast(message,type);
@@ -1091,4 +1091,6 @@ document.addEventListener('DOMContentLoaded',()=>{
 
 
 function safeTicketColor(value) { const color=String(value || '').toLowerCase();return TICKET_COLORS.includes(color) ? color : '#0f766e'; }
+
+
 
