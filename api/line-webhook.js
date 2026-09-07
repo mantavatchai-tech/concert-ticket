@@ -1,143 +1,68 @@
-const crypto = require("crypto");
-
-exports.config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-function readRawBody(request) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    request.on("data", (chunk) => chunks.push(chunk));
-    request.on("end", () => resolve(Buffer.concat(chunks)));
-    request.on("error", reject);
-  });
+const crypto=require('node:crypto');
+async function readRawBody(request) {
+  if(Buffer.isBuffer(request.body)) return request.body;
+  if(typeof request.body==='string') return Buffer.from(request.body);
+  if(request.body) throw new Error('Raw request body required');
+  const chunks=[];let length=0;
+  for await(const chunk of request) {
+    length+=chunk.length;if(length>1024*1024) throw new Error('Body too large');chunks.push(chunk);
+  }
+  return Buffer.concat(chunks);
 }
-
-function verifySignature(rawBody, signature) {
-  const secret = process.env.LINE_CHANNEL_SECRET;
-  if (!secret || !signature) return false;
-
-  const digest = crypto
-    .createHmac("sha256", secret)
-    .update(rawBody)
-    .digest("base64");
-
-  if (Buffer.byteLength(digest) !== Buffer.byteLength(signature)) return false;
-  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signature));
+function verify(raw,signature) {
+  if(!process.env.LINE_CHANNEL_SECRET || typeof signature!=='string') return false;
+  const digest=crypto.createHmac('sha256',process.env.LINE_CHANNEL_SECRET).update(raw).digest('base64');
+  return Buffer.byteLength(digest)===Buffer.byteLength(signature) && crypto.timingSafeEqual(Buffer.from(digest),Buffer.from(signature));
 }
-
-async function getLineProfile(userId) {
-  const response = await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(userId)}`, {
-    headers: {
-      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
-    },
-  });
-
-  if (!response.ok) return { userId };
-  return response.json();
-}
-
-const REGISTRATION_REPLY_TEXT =
-  "รับข้อมูลแล้วค่ะ ต้องการซื้อบัตรคอนเสิร์ตวันไหนแจ้งแอดมินได้เลยค่ะ หรือสอบถามรายละเอียดได้เลยค่ะ\nเมื่อตรวจสอบการชำระเงินเรียบร้อย ทีมงานจะส่ง QR บัตรคอนเสิร์ตให้ทางแชทนี้";
-
-async function updateCustomer(userId, payload) {
-  const params = new URLSearchParams({
-    line_user_id: `eq.${userId}`,
-  });
-
-  await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers?${params}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify(payload),
-  });
-}
-
 async function upsertCustomer(event) {
-  const userId = event.source?.userId;
-  if (!userId) return false;
-
-  const profile = await getLineProfile(userId);
-  const payload = {
-    line_user_id: userId,
-    display_name: profile.displayName || null,
-    picture_url: profile.pictureUrl || null,
-    last_event_type: event.type,
-    followed_at: event.type === "follow" ? new Date().toISOString() : undefined,
-    last_seen_at: new Date().toISOString(),
-  };
-
-  const createResponse = await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      apikey: process.env.SUPABASE_SERVICE_ROLE_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
-      Prefer: "return=minimal",
-    },
-    body: JSON.stringify(payload),
+  const userId=event.source?.userId;
+  if(!/^U[0-9a-fA-F]{32}$/.test(userId || '')) return false;
+  const profileResponse=await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(userId)}`,{
+    headers:{Authorization:`Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`},signal:AbortSignal.timeout(8000)
   });
-
-  if (createResponse.status === 201) return true;
-
-  await updateCustomer(userId, payload);
+  const profile=profileResponse.ok ? await profileResponse.json() : {};
+  const payload={line_user_id:userId,last_event_type:event.type,last_seen_at:new Date().toISOString()};
+  if(profile.displayName) payload.display_name=profile.displayName;
+  if(profile.pictureUrl) payload.picture_url=profile.pictureUrl;
+  if(event.type==='follow') payload.followed_at=new Date().toISOString();
+  const headers={'Content-Type':'application/json',apikey:process.env.SUPABASE_SERVICE_ROLE_KEY,Authorization:`Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`};
+  const create=await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers?on_conflict=line_user_id`,{
+    method:'POST',headers:{...headers,Prefer:'resolution=ignore-duplicates,return=representation'},body:JSON.stringify(payload),signal:AbortSignal.timeout(8000)
+  });
+  if(!create.ok) throw new Error('Customer save failed');
+  const rows=await create.json();
+  if(rows.length) return true;
+  const update=await fetch(`${process.env.SUPABASE_URL}/rest/v1/line_customers?line_user_id=eq.${encodeURIComponent(userId)}`,{
+    method:'PATCH',headers,body:JSON.stringify(payload),signal:AbortSignal.timeout(8000)
+  });
+  if(!update.ok) throw new Error('Customer update failed');
   return false;
 }
-
-async function replyRegistration(event) {
-  if (!event.replyToken || event.replyToken === "00000000000000000000000000000000") return;
-
-  await fetch("https://api.line.me/v2/bot/message/reply", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
-    },
-    body: JSON.stringify({
-      replyToken: event.replyToken,
-      messages: [
-        {
-          type: "text",
-          text: REGISTRATION_REPLY_TEXT,
-        },
-      ],
-    }),
-  });
-}
-
-module.exports = async function handler(request, response) {
-  if (request.method !== "POST") {
-    response.setHeader("Allow", "POST");
-    response.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const rawBody = await readRawBody(request);
-  const signature = request.headers["x-line-signature"] || request.headers["X-Line-Signature"];
-
-  if (!verifySignature(rawBody, signature)) {
-    response.status(401).json({ error: "Invalid LINE signature" });
-    return;
-  }
-
-  const body = JSON.parse(rawBody.toString("utf8"));
-  const events = Array.isArray(body.events) ? body.events : [];
-  const repliedUserIds = new Set();
-
-  for (const event of events) {
-    const userId = event.source?.userId;
-    const isNewCustomer = await upsertCustomer(event);
-    if (isNewCustomer && userId && !repliedUserIds.has(userId) && (event.type === "follow" || event.type === "message")) {
-      await replyRegistration(event);
-      repliedUserIds.add(userId);
+async function handler(request,response) {
+  if(request.method!=='POST') {response.setHeader('Allow','POST');return response.status(405).json({error:'Method not allowed'});}
+  try {
+    const raw=await readRawBody(request);
+    if(!verify(raw,request.headers['x-line-signature'])) return response.status(401).json({error:'Invalid LINE signature'});
+    let body;try {body=JSON.parse(raw.toString('utf8'));} catch {return response.status(400).json({error:'Invalid JSON'});}
+    if(!Array.isArray(body.events)) return response.status(400).json({error:'Invalid events'});
+    if(body.events.length && (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.LINE_CHANNEL_ACCESS_TOKEN)) return response.status(503).json({error:'Webhook not configured'});
+    for(const event of body.events) {
+      if(!['follow','message','unfollow'].includes(event.type)) continue;
+      // A failed database write returns non-2xx so LINE can redeliver the event.
+      const isNew=await upsertCustomer(event);
+      if(isNew && event.replyToken && event.replyToken!=='00000000000000000000000000000000' && ['follow','message'].includes(event.type)) {
+        const reply=await fetch('https://api.line.me/v2/bot/message/reply',{
+          method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+process.env.LINE_CHANNEL_ACCESS_TOKEN},
+          body:JSON.stringify({replyToken:event.replyToken,messages:[{type:'text',text:'รับข้อมูลแล้วค่ะ ต้องการซื้อบัตรคอนเสิร์ตวันไหนแจ้งแอดมินได้เลยค่ะ\nเมื่อตรวจสอบการชำระเงินเรียบร้อย ทีมงานจะส่งลิงก์ QR ให้ทางแชทนี้'}]}),signal:AbortSignal.timeout(8000)
+        });
+        // A greeting is best-effort. Customer data is already safely saved.
+        if(!reply.ok) console.warn('LINE greeting was not accepted:',reply.status);
+      }
     }
+    return response.status(200).json({ok:true});
+  } catch {
+    return response.status(503).json({error:'Webhook processing failed; retry later'});
   }
-
-  response.status(200).json({ ok: true });
-};
+}
+module.exports=handler;
+module.exports.config={api:{bodyParser:false}};

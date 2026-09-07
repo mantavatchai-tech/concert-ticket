@@ -1,138 +1,44 @@
-function getBaseUrl(request) {
-  if (process.env.APP_URL) return process.env.APP_URL.replace(/\/$/, "");
-  const host = request.headers["x-forwarded-host"] || request.headers.host;
-  const proto = request.headers["x-forwarded-proto"] || "https";
-  return `${proto}://${host}`;
-}
-
-function asTicketUrl(baseUrl, code) {
-  return `${baseUrl}/api/qr?code=${encodeURIComponent(code)}`;
-}
-
-function buildMessages(baseUrl, ticket) {
-  const codes = Array.isArray(ticket.codes) ? ticket.codes : [];
-  const eventDate = formatEventDate(ticket.event_day);
-  const header = [
-    `บัตรคอนเสิร์ต ${ticket.ticket_id}`,
-    `ประเภท: ${ticket.ticket_type}`,
-    `วันงาน: ${eventDate}`,
-    ticket.buyer_name ? `ลูกค้า: ${ticket.buyer_name}` : "",
-    ticket.perks ? `สิทธิ์ VIP: ${ticket.perks}` : "",
-    "",
-    "แสดง QR นี้ที่จุดเข้างาน",
-    `หน้าบัตร: ${baseUrl}/ticket.html?id=${encodeURIComponent(ticket.ticket_id)}`,
-  ].filter(Boolean).join("\n");
-
-  const imageMessages = codes.slice(0, 4).map((code) => ({
-    type: "image",
-    originalContentUrl: asTicketUrl(baseUrl, code),
-    previewImageUrl: asTicketUrl(baseUrl, code),
-  }));
-
-  return [
-    { type: "text", text: `${header}\nรหัส QR: ${codes.join(", ")}` },
-    ...imageMessages,
-  ];
-}
-
-async function pushLineMessage(lineToken, to, messages) {
-  return fetch("https://api.line.me/v2/bot/message/push", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${lineToken}`,
-    },
-    body: JSON.stringify({ to, messages }),
+async function rpc(name,body) {
+  const response=await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${name}`,{
+    method:'POST',headers:{'Content-Type':'application/json',apikey:process.env.SUPABASE_SERVICE_ROLE_KEY,
+      Authorization:`Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`},body:JSON.stringify(body),signal:AbortSignal.timeout(10000)
   });
+  const data=await response.json();
+  if(!response.ok) {const error=new Error(data.message || 'Database request failed');error.status=response.status;throw error;}
+  return data;
 }
-
-async function readLineError(lineResponse) {
-  const details = await lineResponse.text();
+module.exports=async function handler(request,response) {
+  response.setHeader('Cache-Control','no-store');
+  if(request.method!=='POST') {response.setHeader('Allow','POST');return response.status(405).json({error:'Method not allowed'});}
+  const token=(request.headers.authorization || '').match(/^Bearer ([0-9a-f-]{36})$/i)?.[1];
+  if(!token) return response.status(401).json({error:'กรุณาเข้าสู่ระบบ'});
+  if(!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY || !process.env.LINE_CHANNEL_ACCESS_TOKEN || !process.env.APP_URL) {
+    return response.status(503).json({error:'ยังไม่ได้ตั้งค่า LINE หรือ Supabase บน server'});
+  }
+  const ticketId=request.body?.ticketId;
+  if(typeof ticketId!=='string' || !/^(VIP|REG)\d+$/.test(ticketId)) return response.status(400).json({error:'เลขบัตรไม่ถูกต้อง'});
+  let prepared;
   try {
-    const parsed = JSON.parse(details);
-    return parsed.message || details;
-  } catch {
-    return details;
-  }
-}
-
-function getLineErrorHint(status) {
-  if (status === 400) return "ตรวจสอบ LINE userId ว่าถูกต้อง และลูกค้าต้องเพิ่มเพื่อน LINE OA แล้ว";
-  if (status === 401) return "ตรวจสอบ LINE_CHANNEL_ACCESS_TOKEN ใน Vercel ว่าถูกต้องและเป็น Channel access token ล่าสุด";
-  if (status === 403) return "LINE OA หรือ token ไม่มีสิทธิ์ส่ง Push message";
-  if (status === 429) return "LINE จำกัดจำนวนการส่งชั่วคราว กรุณารอสักครู่แล้วลองใหม่";
-  return "ตรวจสอบ LINE userId, LINE token, และสถานะเพื่อนของลูกค้ากับ LINE OA";
-}
-
-function formatEventDate(value) {
-  const legacyMap = {
-    "Day 1": "2026-08-27",
-    "Day 2": "2026-08-28",
-    "Day 3": "2026-08-30",
-    "Day 4": "2026-09-06",
-  };
-  const normalized = legacyMap[value] || value;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(normalized)) return normalized || "-";
-
-  return new Intl.DateTimeFormat("th-TH", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "Asia/Bangkok",
-  }).format(new Date(`${normalized}T00:00:00+07:00`));
-}
-
-module.exports = async function handler(request, response) {
-  if (request.method !== "POST") {
-    response.setHeader("Allow", "POST");
-    response.status(405).json({ error: "Method not allowed" });
-    return;
-  }
-
-  const expectedPin = process.env.ADMIN_PIN;
-  const lineToken = process.env.LINE_CHANNEL_ACCESS_TOKEN;
-  if (!expectedPin || !lineToken) {
-    response.status(500).json({ error: "Missing ADMIN_PIN or LINE_CHANNEL_ACCESS_TOKEN" });
-    return;
-  }
-
-  if (request.headers["x-admin-pin"] !== expectedPin) {
-    response.status(401).json({ error: "รหัสแอดมินไม่ถูกต้อง" });
-    return;
-  }
-
-  const { to, ticket } = request.body || {};
-  if (!to || !ticket || !Array.isArray(ticket.codes) || ticket.codes.length === 0) {
-    response.status(400).json({ error: "Missing LINE userId or ticket codes" });
-    return;
-  }
-
-  const messages = buildMessages(getBaseUrl(request), ticket);
-  const lineResponse = await pushLineMessage(lineToken, to, messages);
-
-  if (!lineResponse.ok) {
-    const details = await readLineError(lineResponse);
-    const fallbackResponse = await pushLineMessage(lineToken, to, [messages[0]]);
-    if (fallbackResponse.ok) {
-      response.status(200).json({
-        ok: true,
-        warning: "ส่งรูป QR ไม่สำเร็จ แต่ส่งข้อความและลิงก์บัตรให้ลูกค้าแล้ว",
-        details,
-      });
-      return;
-    }
-
-    const fallbackDetails = await readLineError(fallbackResponse);
-    response.status(lineResponse.status).json({
-      error: "LINE push message failed",
-      status: lineResponse.status,
-      details,
-      hint: getLineErrorHint(lineResponse.status),
-      fallbackStatus: fallbackResponse.status,
-      fallbackDetails,
+    const base=new URL(process.env.APP_URL);
+    if(base.protocol!=='https:') throw new Error('APP_URL ต้องเป็น HTTPS');
+    prepared=await rpc('prepare_line_delivery',{p_session_token:token,p_ticket_id:ticketId});
+    if(prepared.status==='sent') return response.status(200).json({ok:true,alreadySent:true});
+    const ticket=prepared.ticket;
+    // Send only a capability link. Neither caller-supplied recipients nor QR payloads are accepted.
+    const url=`${base.origin}/ticket.html#token=${encodeURIComponent(ticket.access_token)}`;
+    const message=`บัตรคอนเสิร์ต ${ticket.id}\nวันงาน: ${ticket.event_day}\nประเภท: ${ticket.ticket_type}\nเปิด QR บัตรของคุณ: ${url}\nกรุณาเก็บลิงก์นี้เป็นความลับ`;
+    const line=await fetch('https://api.line.me/v2/bot/message/push',{
+      method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`,
+        'X-Line-Retry-Key':prepared.retry_key},body:JSON.stringify({to:ticket.line_user_id,messages:[{type:'text',text:message}]}),signal:AbortSignal.timeout(10000)
     });
-    return;
+    const ok=line.ok || (line.status===409 && Boolean(line.headers.get('x-line-accepted-request-id')));
+    await rpc('finish_line_delivery',{p_ticket_id:ticketId,p_retry_key:prepared.retry_key,p_ok:ok,p_error:ok?null:`LINE HTTP ${line.status}`});
+    if(!ok) return response.status(502).json({error:`LINE ปฏิเสธคำขอ (${line.status}) กรุณาตรวจการตั้งค่าหรือทดลองส่งอีกครั้ง`});
+    return response.status(200).json({ok:true});
+  } catch(error) {
+    if(prepared) {
+      try {await rpc('finish_line_delivery',{p_ticket_id:ticketId,p_retry_key:prepared.retry_key,p_ok:false,p_error:'Delivery outcome uncertain; retry using the same key'});} catch {}
+    }
+    return response.status(error.status===401 || error.status===403 ? 403 : 503).json({error:'ยังยืนยันการส่งไม่ได้ โปรดตรวจสิทธิ์และการเชื่อมต่อ แล้วลองส่งรายการเดิมอีกครั้ง'});
   }
-
-  response.status(200).json({ ok: true });
 };
