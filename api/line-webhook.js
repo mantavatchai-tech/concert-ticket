@@ -1,8 +1,13 @@
 const crypto=require('node:crypto');
 async function readRawBody(request) {
-  if(Buffer.isBuffer(request.body)) return request.body;
-  if(typeof request.body==='string') return Buffer.from(request.body);
-  if(request.body) throw new Error('Raw request body required');
+  // Vercel exposes body as a lazy JSON getter. Do not access it: signatures
+  // require the original bytes from the request stream, including whitespace.
+  const body=Object.getOwnPropertyDescriptor(request,'body');
+  if(body && Object.hasOwn(body,'value')) {
+    if(Buffer.isBuffer(body.value)) return body.value;
+    if(typeof body.value==='string') return Buffer.from(body.value);
+    if(body.value) throw new Error('Raw request body required');
+  }
   const chunks=[];let length=0;
   for await(const chunk of request) {
     length+=chunk.length;if(length>1024*1024) throw new Error('Body too large');chunks.push(chunk);
@@ -17,10 +22,17 @@ function verify(raw,signature) {
 async function upsertCustomer(event) {
   const userId=event.source?.userId;
   if(!/^U[0-9a-fA-F]{32}$/.test(userId || '')) return false;
+  let profile={};
+  try {
   const profileResponse=await fetch(`https://api.line.me/v2/bot/profile/${encodeURIComponent(userId)}`,{
     headers:{Authorization:`Bearer ${process.env.LINE_CHANNEL_ACCESS_TOKEN}`},signal:AbortSignal.timeout(8000)
   });
-  const profile=profileResponse.ok ? await profileResponse.json() : {};
+  if(profileResponse.ok) profile=await profileResponse.json();
+  else console.warn('LINE profile unavailable:',profileResponse.status);
+  } catch {
+    // A failed profile lookup must not prevent saving the signed customer ID.
+    console.warn('LINE profile lookup failed; saving customer without profile');
+  }
   const payload={line_user_id:userId,last_event_type:event.type,last_seen_at:new Date().toISOString()};
   if(profile.displayName) payload.display_name=profile.displayName;
   if(profile.pictureUrl) payload.picture_url=profile.pictureUrl;
@@ -51,12 +63,16 @@ async function handler(request,response) {
       // A failed database write returns non-2xx so LINE can redeliver the event.
       const isNew=await upsertCustomer(event);
       if(isNew && event.replyToken && event.replyToken!=='00000000000000000000000000000000' && ['follow','message'].includes(event.type)) {
+        try {
         const reply=await fetch('https://api.line.me/v2/bot/message/reply',{
           method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+process.env.LINE_CHANNEL_ACCESS_TOKEN},
           body:JSON.stringify({replyToken:event.replyToken,messages:[{type:'text',text:'รับข้อมูลแล้วค่ะ ต้องการซื้อบัตรคอนเสิร์ตวันไหนแจ้งแอดมินได้เลยค่ะ\nเมื่อตรวจสอบการชำระเงินเรียบร้อย ทีมงานจะส่งลิงก์ QR ให้ทางแชทนี้'}]}),signal:AbortSignal.timeout(8000)
         });
         // A greeting is best-effort. Customer data is already safely saved.
         if(!reply.ok) console.warn('LINE greeting was not accepted:',reply.status);
+        } catch {
+          console.warn('LINE greeting failed after customer was saved');
+        }
       }
     }
     return response.status(200).json({ok:true});
